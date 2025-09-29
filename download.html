@@ -1,0 +1,2687 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download do Código - Cartola FC Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-[#FF8C42] to-[#000000] min-h-screen flex items-center justify-center font-sans">
+
+    <div class="bg-white/95 rounded-2xl p-10 shadow-lg text-center max-w-lg mx-auto transform hover:-translate-y-1 transition-transform duration-300">
+        <i class="fas fa-download text-5xl text-[#FF8C42] mb-4"></i>
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Seu Código Está Pronto!</h1>
+        <p class="text-gray-600 mb-6">Clique no botão abaixo para fazer o download de todos os arquivos do projeto <span class="font-bold">Cartola FC Dashboard</span> em um único arquivo .zip.</p>
+        <button id="downloadBtn" class="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out flex items-center gap-2 mx-auto disabled:opacity-75 disabled:cursor-wait">
+            <i class="fas fa-file-archive"></i>
+            <span id="btnText">Baixar Código Fonte (.zip)</span>
+        </button>
+    </div>
+
+    <script>
+        const filesToZip = {
+            'index.html': `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cartola FC Dashboard</title>
+    <script src="https://cdn.tailwindcss.com/script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script type="importmap">
+{
+  "imports": {
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-100">
+    <div id="root"></div>
+  </body>
+</html>`,
+            'index.tsx': `
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+            'metadata.json': `
+{
+  "name": "Cartola FC Dashboard",
+  "description": "An interactive dashboard for analyzing player and team statistics for Cartola FC, a popular fantasy football game. It features data visualizations, player filtering, and lineup variation generation to help users make informed decisions for their teams.",
+  "requestFramePermissions": []
+}`,
+            'App.tsx': `
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { SG_PROBABILITY_DATA as defaultSgData } from './constants';
+import type { FullLineupVariation, ProcessedPlayer, ClubsMap, Match, MarketStatus, ApiPlayer, Club, SgTeam } from './types';
+import { Position, POSITIONS_MAP } from './types';
+import Header from './components/Header';
+import DashboardCharts from './components/DashboardCharts';
+import SgSection from './components/SgSection';
+import VariationsSection from './components/VariationsSection';
+import Filters from './components/Filters';
+import PlayersTable from './components/PlayersTable';
+import Footer from './components/Footer';
+import MatchesSection from './components/MatchesSection';
+import ProbableLineup from './components/ProbableLineup';
+import PlayerScoutDetail from './components/PlayerScoutDetail';
+import Card from './components/Card';
+import SgEditModal from './components/SgEditModal';
+import Modal from './components/Modal';
+
+const STATUS_MAP: { [key: number]: string } = {
+    7: 'Provável',
+    2: 'Dúvida',
+    3: 'Suspenso',
+    5: 'Contundido',
+    6: 'Nulo',
+};
+
+type Formation = "4-3-3" | "4-4-2" | "3-5-2" | "3-4-3" | "5-3-2" | "4-5-1";
+const FORMATIONS: Formation[] = ["4-3-3", "4-4-2", "3-5-2", "3-4-3", "5-3-2", "4-5-1"];
+
+const parseFormation = (formation: Formation): { def: number; mid: number; atk: number } => {
+    const [def, mid, atk] = formation.split('-').map(Number);
+    return { def, mid, atk };
+};
+
+const ProgressBar: React.FC = () => (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+        <h3 className="text-xl font-bold text-gray-800 mb-4">Analisando os craques...</h3>
+        <p className="text-gray-600 mb-6">Estamos criando as melhores combinações para você mitar!</p>
+        <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden relative">
+            <div className="absolute inset-0 w-full h-full">
+                <div
+                    className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] h-4 rounded-full animate-progress-bar"
+                ></div>
+            </div>
+        </div>
+        <style>{\`
+            @keyframes progress-bar-animation {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+            }
+            .animate-progress-bar {
+                animation: progress-bar-animation 1.5s ease-in-out infinite;
+            }
+        \`}</style>
+    </div>
+);
+
+// --- Generator Step 1: Defense Selection ---
+interface DefenseSelectorProps {
+    clubs: Club[];
+    selectedTeams: Record<number, Formation>;
+    onTeamToggle: (teamId: number) => void;
+    onFormationChange: (teamId: number, formation: Formation) => void;
+    onNext: () => void;
+    error: string | null;
+    nextButtonText: string;
+}
+
+const DefenseSelector: React.FC<DefenseSelectorProps> = ({ clubs, selectedTeams, onTeamToggle, onFormationChange, onNext, error, nextButtonText }) => {
+    const selectedTeamIds = Object.keys(selectedTeams).map(Number);
+    
+    return (
+        <div>
+            <h3 className="text-center text-lg font-semibold text-gray-700 mb-1">Passo 1: Escolha sua(s) defesa(s) e formação</h3>
+            <p className="text-center text-sm text-gray-500 mb-6">Selecione os times que não sofrerão gols (SG) e a tática para cada um.</p>
+            
+            {error && (
+                <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md relative mb-4" role="alert">
+                    <strong className="font-bold">Atenção: </strong>
+                    <span className="block sm:inline">{error}</span>
+                </div>
+            )}
+
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-4 gap-y-6">
+                {clubs.map(club => {
+                    const isSelected = selectedTeamIds.includes(club.id);
+                    return (
+                        <div key={club.id} className="flex flex-col items-center gap-2">
+                             <button
+                                onClick={() => onTeamToggle(club.id)}
+                                className={\`relative w-full flex flex-col items-center justify-center p-3 gap-2 bg-gray-50 rounded-lg shadow-sm hover:shadow-lg hover:bg-white transform hover:-translate-y-1 transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed \${isSelected ? 'ring-2 ring-offset-2 ring-[#FF8C42]' : ''}\`}
+                                title={\`Escolher \${club.nome}\`}
+                            >
+                                {isSelected && (
+                                   <div className="absolute top-1 right-1 bg-white rounded-full flex items-center justify-center">
+                                     <i className="fas fa-check-circle text-green-500 text-lg"></i>
+                                   </div>
+                                )}
+                                <img src={club.escudos['60x60']} alt={club.nome} className="w-12 h-12 object-contain"/>
+                                <span className="text-xs font-bold text-center text-gray-800">{club.nome}</span>
+                            </button>
+                             {isSelected && (
+                                <div className="w-full">
+                                    <label htmlFor={\`formation-select-\${club.id}\`} className="text-xs text-center block font-semibold text-gray-600 mb-1">Tática</label>
+                                    <select
+                                        id={\`formation-select-\${club.id}\`}
+                                        value={selectedTeams[club.id]}
+                                        onChange={(e) => onFormationChange(club.id, e.target.value as Formation)}
+                                        onClick={(e) => e.stopPropagation()} // Prevent button click when changing formation
+                                        className="w-full text-sm font-semibold p-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-offset-1 focus:ring-[#FF8C42] focus:border-[#FF8C42] transition"
+                                        aria-label={\`Formação tática para \${club.nome}\`}
+                                    >
+                                        {FORMATIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="mt-8 text-center">
+                <button
+                    onClick={onNext}
+                    disabled={selectedTeamIds.length === 0}
+                    className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
+                >
+                    {nextButtonText} <i className="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- Generator Step 2: Offense Selection ---
+interface OffenseSelectorProps {
+    players: ProcessedPlayer[];
+    selectedDefensiveTeams: number[];
+    matches: Match[];
+    onBack: () => void;
+    onGenerate: (lockedPlayerIds: number[], poolPlayerIds: number[]) => void;
+    isGenerating: boolean;
+    mode: 'quick' | 'advanced';
+}
+
+const OffenseSelector: React.FC<OffenseSelectorProps> = ({ players, selectedDefensiveTeams, matches, onBack, onGenerate, isGenerating, mode }) => {
+    const [poolPlayerIds, setPoolPlayerIds] = useState<number[]>([]);
+    const [lockedPlayerIds, setLockedPlayerIds] = useState<number[]>([]);
+    const [error, setError] = useState<string | null>(null);
+
+    const opponentTeamIds = useMemo(() => {
+        const opponentIds = new Set<number>();
+        selectedDefensiveTeams.forEach(teamId => {
+            const match = matches.find(m => m.clube_casa_id === teamId || m.clube_visitante_id === teamId);
+            if (match) {
+                const opponentId = match.clube_casa_id === teamId ? match.clube_visitante_id : match.clube_casa_id;
+                opponentIds.add(opponentId);
+            }
+        });
+        return opponentIds;
+    }, [selectedDefensiveTeams, matches]);
+
+    const availablePlayers = useMemo(() => {
+        return players.filter(p => p.status === 'Provável' && !opponentTeamIds.has(p.clubeId));
+    }, [players, opponentTeamIds]);
+
+    const midfielders = useMemo(() => availablePlayers.filter(p => p.posicao === Position.MEI).sort((a,b) => b.potencial - a.potencial), [availablePlayers]);
+    const attackers = useMemo(() => availablePlayers.filter(p => p.posicao === Position.ATA).sort((a,b) => b.potencial - a.potencial), [availablePlayers]);
+
+    const handleTogglePool = (playerId: number) => {
+        const newPool = poolPlayerIds.includes(playerId)
+            ? poolPlayerIds.filter(id => id !== playerId)
+            : [...poolPlayerIds, playerId];
+        
+        setPoolPlayerIds(newPool);
+
+        // If a player is removed from the pool, they must also be unlocked.
+        if (!newPool.includes(playerId)) {
+            setLockedPlayerIds(prevLocked => prevLocked.filter(id => id !== playerId));
+        }
+    };
+    
+    const handleToggleLock = (playerId: number) => {
+        // In quick mode, selecting/locking is the same action.
+        if (mode === 'quick') {
+             setLockedPlayerIds(prev =>
+                prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+            );
+            return;
+        }
+
+        // In advanced mode, only players in the pool can be locked.
+        if (poolPlayerIds.includes(playerId)) {
+            setLockedPlayerIds(prevLocked =>
+                prevLocked.includes(playerId)
+                    ? prevLocked.filter(id => id !== playerId)
+                    : [...prevLocked, playerId]
+            );
+        }
+    };
+
+    const handleGenerateClick = () => {
+        setError(null);
+        if (mode === 'advanced') {
+            const selectedMids = poolPlayerIds.filter(id => midfielders.some(p => p.id === id));
+            const selectedAtks = poolPlayerIds.filter(id => attackers.some(p => p.id === id));
+            const lockedMidsCount = lockedPlayerIds.filter(id => midfielders.some(p => p.id === id)).length;
+            const lockedAtksCount = lockedPlayerIds.filter(id => attackers.some(p => p.id === id)).length;
+            
+            // This check is a bit tricky with dynamic formations, so we do a generic check.
+            // The main validation happens in the generation function.
+            if (selectedMids.length + lockedMidsCount < 3 || selectedAtks.length + lockedAtksCount < 1) {
+                 setError("Você precisa selecionar jogadores suficientes para o meio-campo e ataque para gerar as variações.");
+                return;
+            }
+             onGenerate(lockedPlayerIds, poolPlayerIds);
+        } else {
+             onGenerate(lockedPlayerIds, []); // Quick mode doesn't use a pool
+        }
+    };
+
+    const PlayerRow: React.FC<{ player: ProcessedPlayer }> = ({ player }) => {
+        const isSelected = mode === 'quick' ? lockedPlayerIds.includes(player.id) : poolPlayerIds.includes(player.id);
+        const isLocked = lockedPlayerIds.includes(player.id);
+
+        return (
+            <div
+                className={\`flex items-center justify-between p-2 rounded-lg transition-all \${isSelected ? 'bg-orange-100 ring-1 ring-orange-300' : 'bg-gray-50 hover:bg-gray-100'}\`}
+            >
+                <div className="flex items-center gap-2 flex-grow">
+                    {mode === 'advanced' && (
+                        <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleTogglePool(player.id)}
+                            className="h-5 w-5 rounded border-gray-300 text-[#FF8C42] focus:ring-[#FF8C42] cursor-pointer"
+                            aria-label={\`Selecionar \${player.nome}\`}
+                        />
+                    )}
+                    <img src={player.timeEscudo} alt={player.time} className="w-5 h-5" />
+                    <span className="font-semibold text-sm text-gray-800">{player.nome}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-[#FF8C42]">P: {player.potencial.toFixed(2)}</span>
+                    <button 
+                        onClick={() => handleToggleLock(player.id)}
+                        disabled={mode === 'advanced' && !isSelected}
+                        className={\`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-bold transition-all duration-200 ease-in-out disabled:opacity-40 disabled:cursor-not-allowed \${
+                            isLocked ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }\`}
+                        aria-label={isLocked ? \`Desbloquear \${player.nome}\` : \`Cravar \${player.nome}\`}
+                    >
+                        <i className={\`fas \${isLocked ? 'fa-lock' : 'fa-lock-open'}\`}></i>
+                        <span>{isLocked ? 'Cravado' : 'Cravar'}</span>
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    const title = mode === 'quick' ? "Passo 2: Crave seus meias e atacantes (Opcional)" : "Passo 2: Monte seu universo de ataque";
+    const description = mode === 'quick' 
+        ? 'Clique em "Cravar" para garantir um jogador em TODAS as escalações. O sistema completará o time com as melhores opções.'
+        : 'Marque os jogadores que você quer usar nas combinações. Depois, se quiser, clique em "Cravar" para fixar um deles em todas as escalações.';
+
+    const selectedMidsCount = (mode === 'quick' ? lockedPlayerIds : poolPlayerIds).filter(id => midfielders.some(p => p.id === id)).length;
+    const selectedAtksCount = (mode === 'quick' ? lockedPlayerIds : poolPlayerIds).filter(id => attackers.some(p => p.id === id)).length;
+
+    return (
+        <div>
+            <h3 className="text-center text-lg font-semibold text-gray-700 mb-1">{title}</h3>
+            <p className="text-center text-sm text-gray-500 mb-6" dangerouslySetInnerHTML={{ __html: description }}></p>
+            
+            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 rounded-md mb-4 text-sm"><strong className="font-bold">Erro: </strong>{error}</div>}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 className="font-bold text-gray-800 mb-3 text-center">Meio-Campo ({selectedMidsCount} selecionados)</h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto p-2 bg-white rounded-lg border">
+                        {midfielders.map(p => <PlayerRow key={p.id} player={p} />)}
+                    </div>
+                </div>
+                <div>
+                    <h4 className="font-bold text-gray-800 mb-3 text-center">Ataque ({selectedAtksCount} selecionados)</h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto p-2 bg-white rounded-lg border">
+                        {attackers.map(p => <PlayerRow key={p.id} player={p} />)}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-8 flex justify-center items-center gap-4">
+                 <button
+                    onClick={onBack}
+                    className="bg-gray-200 text-gray-800 font-bold py-3 px-8 rounded-lg shadow-md hover:bg-gray-300 transition-all duration-300 ease-in-out"
+                >
+                    <i className="fa-solid fa-arrow-left mr-2"></i> Voltar
+                </button>
+                <button
+                    onClick={handleGenerateClick}
+                    disabled={isGenerating}
+                    className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
+                >
+                    <i className="fa-solid fa-cogs mr-2"></i>
+                    Gerar Escalações
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+const generateLineupsForTeams = (
+    allPlayers: ProcessedPlayer[],
+    allClubs: ClubsMap,
+    matches: Match[],
+    selectedTeamsWithFormation: Record<number, Formation>,
+    lockedPlayerIds: number[] = [],
+    playerPoolIds: number[] = [],
+    existingOffensivePlayerIds: Set<number> = new Set()
+): { variations: FullLineupVariation[], error?: string, exhausted?: boolean } => {
+    
+    const allNewVariations: FullLineupVariation[] = [];
+    const usedPlayerIds = new Set<number>([...existingOffensivePlayerIds, ...lockedPlayerIds]);
+    const lockedPlayers = allPlayers.filter(p => lockedPlayerIds.includes(p.id));
+    const lockedMids = lockedPlayers.filter(p => p.posicao === Position.MEI);
+    const lockedAtks = lockedPlayers.filter(p => p.posicao === Position.ATA);
+
+    const probablePlayers = allPlayers.filter(p => p.status === 'Provável');
+
+    // Determine the universe of offensive players
+    const isAdvancedModeWithPool = playerPoolIds.length > 0;
+    const offensivePlayerSource = isAdvancedModeWithPool 
+        ? probablePlayers.filter(p => playerPoolIds.includes(p.id))
+        : probablePlayers;
+    
+    const offensiveMidfielders = offensivePlayerSource.filter(p => p.posicao === Position.MEI);
+    const offensiveAttackers = offensivePlayerSource.filter(p => p.posicao === Position.ATA);
+
+    for (const selectedTeamIdStr of Object.keys(selectedTeamsWithFormation)) {
+        const selectedTeamId = Number(selectedTeamIdStr);
+        const formation = selectedTeamsWithFormation[selectedTeamId];
+        const { def: defCount, mid: midCount, atk: atkCount } = parseFormation(formation);
+
+        // --- 1. Conflict Check: Locked players vs Defense ---
+        const match = matches.find(m => m.clube_casa_id === selectedTeamId || m.clube_visitante_id === selectedTeamId);
+        const opponentTeamId = match ? (match.clube_casa_id === selectedTeamId ? match.clube_visitante_id : match.clube_casa_id) : -1;
+        
+        const conflictingLockedPlayers = lockedPlayers.filter(p => p.clubeId === opponentTeamId);
+        if (conflictingLockedPlayers.length > 0) {
+            const playerNames = conflictingLockedPlayers.map(p => p.nome).join(', ');
+            return { variations: [], error: \`Você cravou \${playerNames}, que joga(m) contra a defesa do \${allClubs[selectedTeamId]?.nome}. Por favor, ajuste sua seleção.\` };
+        }
+
+        // --- 2. Build Defense (with fallback to 'Dúvida') ---
+        const defenseTeamPlayers = allPlayers.filter(p => p.clubeId === selectedTeamId);
+        const getPlayersForPosition = (positions: Position[], count: number): ProcessedPlayer[] => {
+            const playersInPos = defenseTeamPlayers.filter(p => positions.includes(p.posicao));
+            const provaveis = playersInPos.filter(p => p.status === 'Provável');
+            const duvidas = playersInPos.filter(p => p.status === 'Dúvida').sort((a, b) => b.media - a.media);
+            
+            let lineup = [...provaveis];
+            if (lineup.length < count) {
+                const needed = count - lineup.length;
+                const bestDuvidas = duvidas.slice(0, needed).map(p => ({ ...p, isChosenFromDoubt: true }));
+                lineup.push(...bestDuvidas);
+            }
+            return lineup.slice(0, count);
+        };
+
+        const goalkeeper = getPlayersForPosition([Position.GOL], 1);
+        const defenders = getPlayersForPosition([Position.ZAG, Position.LAT], defCount).sort((a, b) => b.media - a.media);
+        const coach = getPlayersForPosition([Position.TEC], 1);
+        
+        if (goalkeeper.length < 1 || defenders.length < defCount || coach.length < 1) {
+             console.warn(\`Skipping team \${allClubs[selectedTeamId]?.nome} due to incomplete defense for formation \${formation}.\`);
+            continue;
+        }
+
+        // --- 3. Build Offense ---
+        const availableMidfielders = offensiveMidfielders.filter(p => p.clubeId !== opponentTeamId);
+        const availableAttackers = offensiveAttackers.filter(p => p.clubeId !== opponentTeamId);
+        const defensePlayerIds = new Set([...goalkeeper, ...defenders, ...coach].map(p => p.id));
+        
+        const getTopPlayers = (
+            playerList: ProcessedPlayer[],
+            count: number,
+            sortBy: keyof Pick<ProcessedPlayer, 'potencial' | 'media' | 'mediaBasica'>,
+            offset: number = 0
+        ): ProcessedPlayer[] => {
+            const available = playerList.filter(p => !usedPlayerIds.has(p.id) && !defensePlayerIds.has(p.id));
+            const sorted = available.sort((a, b) => (b[sortBy] ?? 0) - (a[sortBy] ?? 0));
+            return sorted.slice(offset, offset + count);
+        };
+        
+        const baseVariation = {
+            defenseTeam: { name: allClubs[selectedTeamId].nome, shield: allClubs[selectedTeamId].escudos['45x45'] },
+            goalkeeper, defenders, coach
+        };
+
+        const createVariation = (id: number, title: string, desc: string, midSort: 'potencial' | 'media', atkSort: 'potencial' | 'media', midOffset = 0, atkOffset = 0) => {
+            const neededMids = midCount - lockedMids.length;
+            const neededAtks = atkCount - lockedAtks.length;
+            
+            const autoMids = neededMids > 0 ? getTopPlayers(availableMidfielders, neededMids, midSort, midOffset) : [];
+            const autoAtks = neededAtks > 0 ? getTopPlayers(availableAttackers, neededAtks, atkSort, atkOffset) : [];
+
+            if ((lockedMids.length + autoMids.length) === midCount && (lockedAtks.length + autoAtks.length) === atkCount) {
+                const finalMids = [...lockedMids, ...autoMids];
+                const finalAtks = [...lockedAtks, ...autoAtks];
+                const variationTitle = \`\${title} (\${formation})\`;
+                allNewVariations.push({ ...baseVariation, id: Date.now() + id + selectedTeamId, title: variationTitle, description: desc, midfielders: finalMids, attackers: finalAtks });
+                [...autoMids, ...autoAtks].forEach(p => usedPlayerIds.add(p.id));
+            }
+        };
+
+        createVariation(1, "Potencial Máximo", "Melhores por pontuação de potencial.", 'potencial', 'potencial');
+        createVariation(2, "Equilíbrio Total", "Melhores por média geral.", 'media', 'media');
+        createVariation(3, "Apostas de Valor", "Ótimos jogadores que não estão no topo da lista.", 'potencial', 'potencial', 3, 3);
+    }
+    
+    if (Object.keys(selectedTeamsWithFormation).length > 0 && allNewVariations.length === 0) {
+        const errorMsg = isAdvancedModeWithPool 
+            ? 'Não foi possível formar times com os jogadores selecionados. Tente adicionar mais opções ao seu universo de jogadores.'
+            : 'Os times selecionados não possuem uma defesa completa para as táticas escolhidas ou não há atacantes/meias prováveis suficientes. Tente outras combinações.';
+        return { variations: [], error: errorMsg };
+    }
+
+    // --- 4. Check if we've run out of players for future generations ---
+    let minMidsNeeded = 10;
+    let minAtksNeeded = 10;
+    Object.values(selectedTeamsWithFormation).forEach(f => {
+        const { mid, atk } = parseFormation(f);
+        minMidsNeeded = Math.min(minMidsNeeded, mid);
+        minAtksNeeded = Math.min(minAtksNeeded, atk);
+    });
+    
+    const remainingMids = offensiveMidfielders.filter(p => !usedPlayerIds.has(p.id)).length;
+    const remainingAtks = offensiveAttackers.filter(p => !usedPlayerIds.has(p.id)).length;
+    const exhausted = remainingMids < (minMidsNeeded - lockedMids.length) || remainingAtks < (minAtksNeeded - lockedAtks.length);
+
+    return { variations: allNewVariations, exhausted };
+};
+
+const App: React.FC = () => {
+    const [loading, setLoading] = useState(true);
+    const [players, setPlayers] = useState<ProcessedPlayer[]>([]);
+    const [clubs, setClubs] = useState<ClubsMap>({});
+    const [matches, setMatches] = useState<Match[]>([]);
+    const [marketInfo, setMarketInfo] = useState<{ status: number, round: number } | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+    const [selectedPlayerForScout, setSelectedPlayerForScout] = useState<ProcessedPlayer | null>(null);
+    const [sgData, setSgData] = useState<SgTeam[]>(defaultSgData);
+    const [isSgModalOpen, setIsSgModalOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    const [filters, setFilters] = useState({
+        position: 'all',
+        team: 'all',
+        sortBy: 'potencial',
+    });
+   
+    const [generatorMode, setGeneratorMode] = useState<'quick' | 'advanced' | null>(null);
+    const [generatorStep, setGeneratorStep] = useState<'selectDefense' | 'selectOffense' | 'view'>('selectDefense');
+    const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedFullLineups, setGeneratedFullLineups] = useState<FullLineupVariation[]>([]);
+    const [generatorError, setGeneratorError] = useState<string | null>(null);
+    const [selectedTeamsForGenerator, setSelectedTeamsForGenerator] = useState<Record<number, Formation>>({});
+    const [lockedOffensivePlayers, setLockedOffensivePlayers] = useState<number[]>([]);
+    const [advancedPlayerPool, setAdvancedPlayerPool] = useState<number[]>([]);
+    const [allOffensivePlayersUsed, setAllOffensivePlayersUsed] = useState(false);
+
+    useEffect(() => {
+        const fetchData = async (isInitialLoad = false) => {
+            if (isInitialLoad) setLoading(true);
+            try {
+                const PROXY_URL = 'https://corsproxy.io/?';
+                const API_BASE = \`\${PROXY_URL}https://api.cartola.globo.com\`;
+
+                const [clubesRes, atletasRes, partidasRes, mercadoRes] = await Promise.all([
+                    fetch(\`\${API_BASE}/clubes\`).then(res => res.json()),
+                    fetch(\`\${API_BASE}/atletas/mercado\`).then(res => res.json()),
+                    fetch(\`\${API_BASE}/partidas\`).then(res => res.json()),
+                    fetch(\`\${API_BASE}/mercado/status\`).then(res => res.json()),
+                ]);
+
+                const clubesData: { [key: string]: Club } = clubesRes;
+                const atletasData: { atletas?: ApiPlayer[] } = atletasRes;
+                const partidasData: { partidas: Match[] } = partidasRes;
+                const mercadoData: MarketStatus = mercadoRes;
+
+                const activeClubIds = new Set(
+                    partidasData.partidas.flatMap(p => [p.clube_casa_id, p.clube_visitante_id])
+                );
+
+                const clubsMap: ClubsMap = Object.values(clubesData)
+                    .filter(club => activeClubIds.has(club.id))
+                    .reduce((acc, club) => {
+                        acc[club.id] = club;
+                        return acc;
+                    }, {} as ClubsMap);
+                
+                const calculatePlayerPotencial = (player: Omit<ProcessedPlayer, 'potencial'>): number => {
+                    if (player.jogos === 0) return player.media > 0 ? player.media / 2 : 0;
+                    
+                    const G_POINTS = 8;
+                    const A_POINTS = 5;
+                    const DS_POINTS = 1;
+                    const MEDIA_BASICA_WEIGHT = 1.2;
+
+                    const perGameGols = (player.gols / player.jogos) * G_POINTS;
+                    const perGameAssists = (player.assistencias / player.jogos) * A_POINTS;
+                    const perGameDesarmes = (player.desarmes / player.jogos) * DS_POINTS;
+
+                    const potencial = (player.mediaBasica * MEDIA_BASICA_WEIGHT) + 
+                                     perGameGols + perGameAssists + perGameDesarmes;
+                    
+                    return parseFloat(potencial.toFixed(2));
+                };
+                
+                const processedPlayersWithoutPotencial: Omit<ProcessedPlayer, 'potencial'>[] = (atletasData.atletas || [])
+                    .filter(player => activeClubIds.has(player.clube_id))
+                    .map(player => {
+                        const position = POSITIONS_MAP[player.posicao_id];
+                        if (!position) {
+                            return null;
+                        }
+                        
+                        const scout = player.scout || {};
+                        const jogos = player.jogos_num;
+                        
+                        let mediaBasica = 0;
+                        if (jogos > 0) {
+                            const totalPontos = player.media_num * jogos;
+                            const pontosGols = (scout.G ?? 0) * 8;
+                            const pontosAssistencias = (scout.A ?? 0) * 5;
+                            const isDefensive = [Position.GOL, Position.LAT, Position.ZAG, Position.TEC].includes(position);
+                            const pontosSG = isDefensive ? (scout.SG ?? 0) * 5 : 0;
+                            const pontosBasicos = totalPontos - pontosGols - pontosAssistencias - pontosSG;
+                            mediaBasica = pontosBasicos / jogos;
+                        }
+
+                        return {
+                            id: player.atleta_id,
+                            nome: player.apelido,
+                            posicao: position,
+                            clubeId: player.clube_id,
+                            time: clubsMap[player.clube_id]?.nome ?? 'Desconhecido',
+                            timeEscudo: clubsMap[player.clube_id]?.escudos['30x30'] ?? '',
+                            media: player.media_num,
+                            jogos: player.jogos_num,
+                            gols: scout.G ?? 0,
+                            assistencias: scout.A ?? 0,
+                            desarmes: scout.DS ?? 0,
+                            mediaBasica: mediaBasica,
+                            roubosDeBola: scout.RB ?? 0,
+                            cartoesAmarelos: scout.CA ?? 0,
+                            cartoesVermelhos: scout.CV ?? 0,
+                            faltasCometidas: scout.FC ?? 0,
+                            status: STATUS_MAP[player.status_id] ?? 'Indefinido',
+                        };
+                    })
+                    .filter((player): player is Omit<ProcessedPlayer, 'potencial'> => player !== null);
+                
+                const processedPlayers: ProcessedPlayer[] = processedPlayersWithoutPotencial.map(p => ({
+                    ...p,
+                    potencial: calculatePlayerPotencial(p),
+                }));
+
+                setClubs(clubsMap);
+                setPlayers(processedPlayers);
+                setMatches(partidasData.partidas);
+                setMarketInfo({ status: mercadoData.status_mercado, round: mercadoData.rodada_atual });
+                setLastUpdated(new Date());
+
+                // Load SG data from localStorage or use default
+                const sgStorageKey = \`sgData_rodada_\${mercadoData.rodada_atual}\`;
+                const savedSgData = localStorage.getItem(sgStorageKey);
+                if (savedSgData) {
+                    setSgData(JSON.parse(savedSgData));
+                } else {
+                    setSgData(defaultSgData);
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch Cartola API data:", error);
+            } finally {
+                if (isInitialLoad) setLoading(false);
+            }
+        };
+
+        // Check for admin mode
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('admin') === 'true') {
+            setIsAdmin(true);
+        }
+
+        fetchData(true); // Initial fetch
+        const intervalId = setInterval(fetchData, 4 * 60 * 60 * 1000); // 4 hours
+
+        return () => clearInterval(intervalId); // Cleanup on component unmount
+    }, []);
+
+    // Auto-scroll to variations when generated
+    useEffect(() => {
+        if (generatorStep === 'view' && !isGenerating) {
+            setTimeout(() => {
+                const variationsElement = document.getElementById('variationsSection');
+                variationsElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+    }, [generatorStep, isGenerating]);
+
+    const handleSaveSgData = (newSgData: SgTeam[]) => {
+        if (!marketInfo) return;
+        const sgStorageKey = \`sgData_rodada_\${marketInfo.round}\`;
+        
+        // Auto-calculate width and format probability string
+        const processedSgData = newSgData.map(item => {
+            const probNumber = parseInt(item.probability, 10) || 0;
+            return {
+                ...item,
+                probability: \`\${probNumber - 10}-\${probNumber}%\`,
+                width: \`\${probNumber}%\`,
+            }
+        });
+
+        localStorage.setItem(sgStorageKey, JSON.stringify(processedSgData));
+        setSgData(processedSgData);
+        setIsSgModalOpen(false);
+    };
+
+    const uniqueTeams = useMemo(() => {
+        return [...new Set(Object.values(clubs).map((c: Club) => c.nome))].sort();
+    }, [clubs]);
+    
+    const sortedClubs = useMemo(() => Object.values(clubs).sort((a: Club, b: Club) => a.nome.localeCompare(b.nome)), [clubs]);
+
+    const filteredPlayers = useMemo(() => {
+        let playersCopy = [...players];
+        playersCopy = playersCopy.filter((player) => {
+            const positionMatch = filters.position === 'all' || player.posicao === filters.position;
+            const teamMatch = filters.team === 'all' || player.time === filters.team;
+            return positionMatch && teamMatch;
+        });
+
+        playersCopy.sort((a, b) => {
+            switch (filters.sortBy) {
+                case 'potencial':
+                    return (b.potencial ?? 0) - (a.potencial ?? 0);
+                case 'media':
+                    return (b.media ?? 0) - (a.media ?? 0);
+                case 'mediaBasica':
+                    return (b.mediaBasica ?? 0) - (a.mediaBasica ?? 0);
+                case 'gols':
+                    return (b.gols ?? 0) - (a.gols ?? 0);
+                case 'assistencias':
+                    return (b.assistencias ?? 0) - (a.assistencias ?? 0);
+                case 'desarmes':
+                    return (b.desarmes ?? 0) - (a.desarmes ?? 0);
+                case 'nome':
+                    return a.nome.localeCompare(b.nome);
+                default:
+                    return 0;
+            }
+        });
+
+        return playersCopy;
+    }, [filters, players]);
+
+    const handleInitialGenerate = useCallback((lockedIds: number[], poolIds: number[]) => {
+        setIsGenerating(true);
+        setGeneratorError(null);
+        setAllOffensivePlayersUsed(false);
+        setLockedOffensivePlayers(lockedIds);
+        setAdvancedPlayerPool(poolIds);
+
+        setTimeout(() => {
+            const result = generateLineupsForTeams(players, clubs, matches, selectedTeamsForGenerator, lockedIds, poolIds);
+            
+            if (result.error) {
+                setGeneratorError(result.error);
+                setGeneratorStep('selectOffense'); // Go back to offense selection on error
+                setIsGenerating(false);
+                return;
+            }
+            
+            setGeneratedFullLineups(result.variations || []);
+            setAllOffensivePlayersUsed(!!result.exhausted);
+            setGeneratorStep('view');
+            setIsGenerating(false);
+
+        }, 1500); // Simulate generation time
+    }, [players, clubs, matches, selectedTeamsForGenerator]);
+
+    const handleGenerateMoreVariations = useCallback(() => {
+        if (Object.keys(selectedTeamsForGenerator).length === 0) return;
+
+        setIsGenerating(true);
+        const existingOffensiveIds: Set<number> = new Set(
+            generatedFullLineups.flatMap(v => [...v.midfielders, ...v.attackers].map(p => p.id))
+        );
+
+        setTimeout(() => {
+            const result = generateLineupsForTeams(players, clubs, matches, selectedTeamsForGenerator, lockedOffensivePlayers, advancedPlayerPool, existingOffensiveIds);
+
+            if (result.variations && result.variations.length > 0) {
+                setGeneratedFullLineups(prev => [...prev, ...result.variations!]);
+            }
+            
+            setAllOffensivePlayersUsed(!!result.exhausted || (result.variations && result.variations.length === 0));
+            setIsGenerating(false);
+        }, 1500);
+
+    }, [players, clubs, matches, selectedTeamsForGenerator, generatedFullLineups, lockedOffensivePlayers, advancedPlayerPool]);
+
+    const handleTeamToggleForGenerator = (teamId: number) => {
+        setSelectedTeamsForGenerator(prev => {
+            const newSelection = { ...prev };
+            if (newSelection[teamId]) {
+                delete newSelection[teamId];
+            } else {
+                newSelection[teamId] = '4-3-3'; // Default formation
+            }
+            return newSelection;
+        });
+    };
+    
+    const handleFormationChangeForGenerator = (teamId: number, formation: Formation) => {
+        setSelectedTeamsForGenerator(prev => ({
+            ...prev,
+            [teamId]: formation,
+        }));
+    };
+
+    const handleMatchClick = useCallback((match: Match) => {
+        setSelectedMatch(match);
+    }, []);
+
+    const handlePlayerClick = (player: ProcessedPlayer) => {
+        setSelectedPlayerForScout(player);
+    };
+    
+    const handleCloseScoutDetail = () => {
+        setSelectedPlayerForScout(null);
+    };
+    
+    const handleOpenGenerator = (mode: 'quick' | 'advanced') => {
+        setGeneratorMode(mode);
+        setIsGeneratorModalOpen(true);
+    };
+    
+    const handleCloseGenerator = () => {
+        setIsGeneratorModalOpen(false);
+        setTimeout(() => {
+            setGeneratedFullLineups([]);
+            setGeneratorStep('selectDefense');
+            setGeneratorError(null);
+            setSelectedTeamsForGenerator({});
+            setAllOffensivePlayersUsed(false);
+            setLockedOffensivePlayers([]);
+            setAdvancedPlayerPool([]);
+            setGeneratorMode(null);
+        }, 300);
+    };
+    
+    const handleDefenseSelectionNext = () => {
+        setGeneratorError(null);
+        setGeneratorStep('selectOffense');
+    };
+
+    const renderGeneratorContent = () => {
+        if (isGenerating) return <ProgressBar />;
+        if (!generatorMode) return null;
+
+        switch (generatorStep) {
+            case 'selectDefense':
+                return <DefenseSelector
+                    clubs={sortedClubs}
+                    selectedTeams={selectedTeamsForGenerator}
+                    onTeamToggle={handleTeamToggleForGenerator}
+                    onFormationChange={handleFormationChangeForGenerator}
+                    onNext={handleDefenseSelectionNext}
+                    error={generatorError}
+                    nextButtonText={'Próximo Passo'}
+                />;
+            case 'selectOffense':
+                return <OffenseSelector
+                    players={players}
+                    selectedDefensiveTeams={Object.keys(selectedTeamsForGenerator).map(Number)}
+                    matches={matches}
+                    onBack={() => { setGeneratorError(null); setGeneratorStep('selectDefense'); }}
+                    onGenerate={handleInitialGenerate}
+                    isGenerating={isGenerating}
+                    mode={generatorMode}
+                />;
+            case 'view':
+                 return (
+                    <div>
+                        <VariationsSection variations={generatedFullLineups} />
+                        <div className="mt-6 text-center">
+                            {allOffensivePlayersUsed ? (
+                                <p className="text-gray-500 italic">Todas as combinações de ataque possíveis foram geradas.</p>
+                            ) : (
+                                    <button
+                                    onClick={handleGenerateMoreVariations}
+                                    disabled={isGenerating}
+                                    className="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out flex items-center gap-2 mx-auto disabled:opacity-75 disabled:cursor-wait"
+                                >
+                                    <i className="fa-solid fa-plus"></i>
+                                    Gerar mais opções
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+    
+    const getGeneratorTitle = () => {
+        if (isGenerating) return "Gerando Variações...";
+        
+        // Dynamic title for the results view
+        if (generatorStep === 'view') {
+            const selectedCount = Object.keys(selectedTeamsForGenerator).length;
+            if (selectedCount === 1) {
+                const teamId = Object.keys(selectedTeamsForGenerator)[0];
+                const teamName = clubs[Number(teamId)]?.nome;
+                return \`Variações para \${teamName || 'Defesa Selecionada'}\`;
+            }
+            if (selectedCount > 1) {
+                return \`Variações para \${selectedCount} Defesas\`;
+            }
+            return "Variações Geradas";
+        }
+
+        // Titles for selection steps
+        if (generatorMode === 'quick') {
+            switch (generatorStep) {
+                case 'selectDefense': return "Gerador Rápido - Defesa";
+                case 'selectOffense': return "Gerador Rápido - Ataque";
+            }
+        }
+        
+        if (generatorMode === 'advanced') {
+            switch (generatorStep) {
+                case 'selectDefense': return "Gerador Avançado - Defesa";
+                case 'selectOffense': return "Gerador Avançado - Ataque";
+            }
+        }
+
+        return "Gerador de Escalação"; // Fallback
+    };
+
+    if (loading) {
+        return (
+            <div className="bg-gradient-to-br from-[#FF8C42] to-[#000000] min-h-screen flex items-center justify-center">
+                <div className="text-center text-white">
+                    <i className="fas fa-futbol fa-spin fa-3x mb-4"></i>
+                    <h1 className="text-2xl font-bold">Carregando dados do Cartola...</h1>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="bg-gradient-to-br from-[#FF8C42] to-[#000000] min-h-screen font-sans text-[#1A1A1A]">
+            <div className="container mx-auto max-w-7xl p-2 sm:p-5">
+                <Header marketStatus={marketInfo?.status ?? null} roundNumber={marketInfo?.round ?? null} />
+                <main>
+                    <DashboardCharts players={filteredPlayers} />
+                    
+                    <MatchesSection matches={matches} clubs={clubs} onMatchClick={handleMatchClick} />
+
+                    <h2 className="text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow">Top 5 Segurança de Gols (SG)</h2>
+                    <SgSection sgData={sgData} onEdit={() => setIsSgModalOpen(true)} isAdmin={isAdmin} />
+
+                    <Card title="Central de Escalações" icon={<i className="fa-solid fa-cogs"></i>} className="my-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-center">
+                            <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                                <i className="fa-solid fa-rocket text-4xl text-[#FF8C42] mb-3"></i>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">Gerador Rápido</h3>
+                                <p className="text-gray-600 mb-4">Escolha as defesas, a tática, e deixe nosso algoritmo montar os melhores ataques.</p>
+                                <button
+                                    onClick={() => handleOpenGenerator('quick')}
+                                    className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-2 px-6 rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300"
+                                >
+                                    Iniciar
+                                </button>
+                            </div>
+                             <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                                <i className="fa-solid fa-chess-king text-4xl text-red-600 mb-3"></i>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">Gerador Avançado (Tiro Curto)</h3>
+                                <p className="text-gray-600 mb-4">Crie um universo de jogadores, escolha a tática, e gere combinações personalizadas.</p>
+                                <button
+                                    onClick={() => handleOpenGenerator('advanced')}
+                                    className="bg-gradient-to-r from-red-500 to-orange-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300"
+                                >
+                                    Iniciar
+                                </button>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Filters
+                        teams={uniqueTeams}
+                        filters={filters}
+                        onFilterChange={setFilters}
+                    />
+
+                    <h2 className="text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow">Jogadores Destaques</h2>
+                    <PlayersTable players={filteredPlayers} onPlayerClick={handlePlayerClick} />
+                </main>
+                <Footer />
+                
+                <Modal 
+                    isOpen={isGeneratorModalOpen} 
+                    onClose={handleCloseGenerator}
+                    title={getGeneratorTitle()}
+                >
+                    {renderGeneratorContent()}
+                </Modal>
+
+                {selectedMatch && (
+                    <Modal 
+                        isOpen={selectedMatch !== null} 
+                        onClose={() => setSelectedMatch(null)}
+                        title={\`Prováveis: \${clubs[selectedMatch.clube_casa_id]?.nome} vs \${clubs[selectedMatch.clube_visitante_id]?.nome}\`}
+                    >
+                        <ProbableLineup
+                            match={selectedMatch}
+                            clubs={clubs}
+                            players={players}
+                            lastUpdated={lastUpdated}
+                        />
+                    </Modal>
+                )}
+
+                {selectedPlayerForScout && (
+                    <Modal 
+                        isOpen={selectedPlayerForScout !== null} 
+                        onClose={handleCloseScoutDetail}
+                        title={\`Scouts de \${selectedPlayerForScout.nome}\`}
+                    >
+                        <PlayerScoutDetail player={selectedPlayerForScout} />
+                    </Modal>
+                )}
+
+                <SgEditModal
+                    isOpen={isSgModalOpen}
+                    onClose={() => setIsSgModalOpen(false)}
+                    onSave={handleSaveSgData}
+                    currentSgData={sgData}
+                    roundNumber={marketInfo?.round ?? 0}
+                />
+            </div>
+        </div>
+    );
+};
+
+export default App;`,
+            'types.ts': `
+export enum Position {
+    GOL = 'GOL',
+    LAT = 'LAT',
+    ZAG = 'ZAG',
+    MEI = 'MEI',
+    ATA = 'ATA',
+    TEC = 'TEC',
+}
+
+export const POSITIONS_MAP: { [key: number]: Position } = {
+    1: Position.GOL,
+    2: Position.LAT,
+    3: Position.ZAG,
+    4: Position.MEI,
+    5: Position.ATA,
+    6: Position.TEC,
+};
+
+export interface ApiPlayer {
+    atleta_id: number;
+    apelido: string;
+    clube_id: number;
+    posicao_id: number;
+    preco_num: number;
+    variacao_num: number;
+    media_num: number;
+    jogos_num: number;
+    status_id: number;
+    scout: {
+        G?: number;
+        A?: number;
+        DS?: number;
+        SG?: number;
+        RB?: number;
+        CA?: number;
+        CV?: number;
+        FC?: number;
+        [key:string]: number | undefined;
+    };
+}
+
+export interface Club {
+    id: number;
+    nome: string;
+    abreviacao: string;
+    escudos: {
+        '60x60': string;
+        '45x45': string;
+        '30x30': string;
+    };
+}
+
+export type ClubsMap = { [key: number]: Club };
+
+export interface Match {
+    clube_casa_id: number;
+    clube_visitante_id: number;
+    partida_data: string;
+    local: string;
+}
+
+export interface MarketStatus {
+    status_mercado: number;
+    rodada_atual: number;
+}
+
+
+export interface SgTeam {
+    team: string;
+    probability: string;
+    observation: string;
+    width: string;
+}
+
+export interface ProcessedPlayer {
+    id: number;
+    nome: string;
+    posicao: Position;
+    time: string;
+    timeEscudo: string;
+    clubeId: number;
+    media: number;
+    jogos: number;
+    gols: number;
+    assistencias: number;
+    desarmes: number;
+    potencial: number;
+    mediaBasica: number;
+    roubosDeBola: number;
+    cartoesAmarelos: number;
+    cartoesVermelhos: number;
+    faltasCometidas: number;
+    status: string;
+    isChosenFromDoubt?: boolean;
+}
+
+export interface FullLineupVariation {
+    id: number;
+    title: string;
+    description: string;
+    defenseTeam: {
+        name: string;
+        shield: string;
+    };
+    goalkeeper: ProcessedPlayer[];
+    defenders: ProcessedPlayer[];
+    midfielders: ProcessedPlayer[];
+    attackers: ProcessedPlayer[];
+    coach: ProcessedPlayer[];
+}`,
+            'constants.ts': `
+import type { SgTeam } from './types';
+
+export const SG_PROBABILITY_DATA: SgTeam[] = [
+    { team: "São Paulo", probability: "55-65%", observation: "Boa opção de SG (fonte: Gato Mestre)", width: "65%" },
+    { team: "Atlético-MG", probability: "60-70%", observation: "Defesa sólida, boas chances de SG", width: "70%" },
+    { team: "Palmeiras", probability: "50-60%", observation: "Força defensiva, bom mandante", width: "60%" },
+    { team: "Flamengo", probability: "55-65%", observation: "Boa média de SG, time forte", width: "65%" },
+    { team: "Fortaleza / Internacional", probability: "50-60%", observation: "Opções alternativas de SG", width: "60%" },
+];`,
+            'shareable.html': `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cartola FC Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com/script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        /* A custom style for text-shadow which is not a default tailwind class */
+        .text-shadow {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Recharts Library -->
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/javascript">
+        // De-structure libraries from window object
+        const { useState, useMemo, useCallback } = React;
+        const { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+        const e = React.createElement;
+
+        // --- From types.ts ---
+        const Position = {
+            MEI: 'MEI',
+            ATA: 'ATA',
+        };
+
+        // --- From constants.ts ---
+        const PLAYERS_DATA = [
+            { posicao: Position.MEI, nome: "Arrascaeta", time: "Flamengo", media: 9.74, gols: 13, assistencias: 10, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Andreas Pereira", time: "Palmeiras", media: 9, gols: 1, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Matheus Pereira", time: "Cruzeiro", media: 7.62, gols: 5, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Alan Patrick", time: "Internacional", media: 7.01, gols: 7, assistencias: 5, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Raphael Veiga", time: "Palmeiras", media: 3.11, gols: 1, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Philippe Coutinho", time: "Vasco", media: 5.41, gols: 6, assistencias: 4, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Lucho Acosta", time: "Fluminense", media: 5.83, gols: 0, assistencias: 0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Willian", time: "Grêmio", media: 5.9, gols: 0, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Barreal", time: "Santos", media: 6.02, gols: 1, assistencias: 0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Matheusinho", time: "Sport", media: 5.41, gols: 1, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Kaio Jorge", time: "Cruzeiro", media: 9.63, gols: 15, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Vitor Roque", time: "Palmeiras", media: 7.1, gols: 8, assistencias: 3, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Pablo Vegetti", time: "Vasco", media: 7.27, gols: 11, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Pedro", time: "Flamengo", media: 7.70, gols: 10, assistencias: 4.0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Rayan", time: "Vasco", media: 6.51, gols: 6, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Guilherme", time: "Santos", media: 6.84, gols: 10, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Arthur Cabral", time: "Botafogo", media: 7.11, gols: 3, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Luciano", time: "São Paulo", media: 5.4, gols: 4, assistencias: 3, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Flaco López", time: "Palmeiras", media: 5.69, gols: 2, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Derik Lacerda", time: "Sport", media: 5.68, gols: 3, assistencias: null, fonte: "Jeffinho do Cartola" }
+        ];
+        const SG_TEAMS = ["São Paulo", "Atlético-MG", "Palmeiras", "Flamengo", "Fortaleza", "Internacional"];
+        const SG_PROBABILITY_DATA = [
+            { team: "São Paulo", probability: "55-65%", observation: "Boa opção de SG (fonte: Gato Mestre)", width: "60%" },
+            { team: "Atlético-MG", probability: "60-70%", observation: "Defesa sólida, boas chances de SG", width: "65%" },
+            { team: "Palmeiras", probability: "60%", observation: "Força defensiva, bom mandante", width: "60%" },
+            { team: "Flamengo", probability: "55-65%", observation: "Boa média de SG, time forte", width: "60%" },
+            { team: "Fortaleza / Internacional", probability: "50-60%", observation: "Opções alternativas de SG", width: "55%" },
+        ];
+        
+        // --- From components/Card.tsx ---
+        const Card = ({ children, title, icon, className = '' }) => {
+            return e('div', { className: \`bg-white/95 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-shadow duration-300 transform hover:-translate-y-1 \${className}\` },
+                title && e('h2', { className: 'text-xl font-bold text-[#FF8C42] mb-5 pb-3 border-b-2 border-[#FFA85C] flex items-center' },
+                    icon && e('span', { className: 'mr-3 text-lg' }, icon),
+                    title
+                ),
+                children
+            );
+        };
+        
+        // --- From components/Header.tsx (Share button removed) ---
+        const Header = () => {
+             return e('header', { className: 'text-center p-8 mb-8 bg-white rounded-2xl shadow-xl relative overflow-hidden' },
+                e('div', { className: 'absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C]' }),
+                e('h1', { className: 'text-4xl md:text-5xl font-extrabold mb-2 text-gray-800 uppercase tracking-wide' },
+                    'CARTOLA FC - TIMES TIRO CURTO VERSÃO ',
+                    e('span', { className: 'text-[#FF8C42]' }, '(BETA)')
+                ),
+                e('p', { className: 'text-lg md:text-xl text-gray-600 font-medium' },
+                    'Dashboard com análise dos melhores jogadores e Times Para TIRO CURTO'
+                )
+            );
+        };
+        
+        // --- From components/Footer.tsx ---
+        const Footer = () => {
+            return e('footer', { className: 'text-center p-6 mt-10 border-t-2 border-[#FFA85C]' },
+                e('p', { className: 'text-white opacity-90' },
+                    'Dados da Rodada 25 do Cartola FC | Desenvolvido para análise de desempenho (Jeffinho do Cartola)'
+                )
+            );
+        };
+
+        // --- From components/DashboardCharts.tsx ---
+        const CustomTooltip = ({ active, payload, label }) => {
+          if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return e('div', { className: 'bg-white/90 p-3 rounded-lg border border-gray-200 shadow-md' },
+                e('p', { className: 'font-bold text-gray-800' }, label),
+                payload.map((pld, index) => e('p', { key: index, style: { color: pld.color } }, \`\${pld.name}: \${pld.value}\`)),
+                e('p', { className: 'text-sm text-gray-600' }, \`Gols: \${data.gols ?? 0} | Assist.: \${data.assistencias ?? 0}\`)
+            );
+          }
+          return null;
+        };
+
+        const DashboardCharts = ({ players }) => {
+            const chartData = players.map(p => ({ ...p, name: p.nome.split(' ')[0] }));
+            return e('section', { className: 'grid md:grid-cols-2 gap-6 mb-8' },
+                e(Card, { title: 'Média de Pontuação por Jogador', icon: e('i', { className: 'fas fa-chart-bar' }) },
+                    e('div', { className: 'w-full h-80' },
+                        e(ResponsiveContainer, { width: '100%', height: '100%' },
+                            e(BarChart, { data: chartData, margin: { top: 5, right: 20, left: -10, bottom: 5 } },
+                                e(CartesianGrid, { strokeDasharray: '3 3', vertical: false }),
+                                e(XAxis, { dataKey: 'name', tick: { fontSize: 12 } }),
+                                e(YAxis),
+                                e(Tooltip, { content: e(CustomTooltip), cursor: { fill: 'rgba(255, 140, 66, 0.1)' } }),
+                                e(Bar, { dataKey: 'media', name: 'Média', fill: 'rgba(255, 140, 66, 0.8)', radius: [5, 5, 0, 0] })
+                            )
+                        )
+                    )
+                ),
+                e(Card, { title: 'Gols e Assistências por Jogador', icon: e('i', { className: 'fas fa-futbol' }) },
+                    e('div', { className: 'w-full h-80' },
+                        e(ResponsiveContainer, { width: '100%', height: '100%' },
+                            e(LineChart, { data: chartData, margin: { top: 5, right: 20, left: -10, bottom: 5 } },
+                                e(CartesianGrid, { strokeDasharray: '3 3' }),
+                                e(XAxis, { dataKey: 'name', tick: { fontSize: 12 } }),
+                                e(YAxis),
+                                e(Tooltip, { content: e(CustomTooltip) }),
+                                e(Legend),
+                                e(Line, { type: 'monotone', dataKey: 'gols', name: 'Gols', stroke: '#FF6B35', strokeWidth: 2 }),
+                                e(Line, { type: 'monotone', dataKey: 'assistencias', name: 'Assistências', stroke: '#2196F3', strokeWidth: 2 })
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // --- From components/SgSection.tsx ---
+        const SgSection = ({ sgData }) => {
+            return e(Card, { title: 'Times com Maior Probabilidade de SG', icon: e('i', { className: 'fas fa-shield-alt' }) },
+                e('div', { className: 'overflow-x-auto' },
+                    e('table', { className: 'w-full min-w-max text-left' },
+                        e('thead', null, 
+                            e('tr', null,
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold rounded-tl-lg' }, 'Time'),
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold' }, 'Probabilidade de Vitória'),
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold rounded-tr-lg' }, 'Observação')
+                            )
+                        ),
+                        e('tbody', null, 
+                            sgData.map((team, index) => e('tr', { key: index, className: 'border-b border-purple-100 hover:bg-purple-50 transition-colors' },
+                                e('td', { className: 'p-4 font-medium' }, team.team),
+                                e('td', { className: 'p-4' },
+                                    e('span', null, team.probability),
+                                    e('div', { className: 'w-full bg-gray-200 rounded-full h-2.5 mt-1' },
+                                        e('div', { className: 'bg-gradient-to-r from-green-400 to-lime-500 h-2.5 rounded-full', style: { width: team.width } })
+                                    )
+                                ),
+                                e('td', { className: 'p-4 text-gray-600' }, team.observation)
+                            ))
+                        )
+                    )
+                ),
+                e('div', { className: 'flex justify-around text-center mt-6' },
+                    e('div', { className: 'flex-1 p-4' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '65%'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Maior Probabilidade')
+                    ),
+                    e('div', { className: 'flex-1 p-4 border-x border-gray-200' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '5'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Times Recomendados')
+                    ),
+                    e('div', { className: 'flex-1 p-4' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '55%'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Probabilidade Mínima')
+                    )
+                )
+            );
+        };
+        
+        // --- From components/VariationsSection.tsx ---
+        const PlayerRow = ({ player }) => e('div', { className: 'flex flex-col sm:flex-row justify-between py-2 border-b border-gray-200 last:border-b-0' },
+            e('span', { className: 'font-semibold' }, player.nome),
+            e('span', { className: 'text-sm text-gray-600' }, \`\${player.time} | Média: \${player.media?.toFixed(2) ?? '-'}\`)
+        );
+
+        const VariationCard = ({ variation }) => e('div', { className: 'bg-white/95 rounded-2xl p-5 shadow-lg border-2 border-[#FFA85C]' },
+            e('h3', { className: 'text-lg font-bold text-center text-[#FF8C42] mb-4' }, \`Variação \${variation.id}\`),
+            e('div', null,
+                e('h4', { className: 'font-bold text-gray-700 mt-4 mb-2' }, 'Meio-Campo (3)'),
+                variation.midfielders.map(player => e(PlayerRow, { key: player.nome, player: player })),
+                e('h4', { className: 'font-bold text-gray-700 mt-6 mb-2' }, 'Ataque (3)'),
+                variation.attackers.map(player => e(PlayerRow, { key: player.nome, player: player }))
+            )
+        );
+
+        const VariationsSection = ({ variations }) => {
+            return e('section', { id: 'variationsSection' },
+                e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10' }, 'Variações de Escalação Baseadas em SG'),
+                e('div', { className: 'grid md:grid-cols-2 lg:grid-cols-3 gap-6' },
+                    variations.map(v => e(VariationCard, { key: v.id, variation: v }))
+                )
+            );
+        };
+
+        // --- From components/Filters.tsx ---
+        const FilterSelect = ({ label, value, onChange, children }) => e('div', { className: 'flex flex-col flex-1 min-w-[180px]' },
+            e('label', { className: 'mb-2 font-semibold text-[#FF8C42]' }, label),
+            e('select', { value: value, onChange: onChange, className: 'p-3 rounded-lg border-2 border-[#FFA85C] focus:border-[#FF8C42] focus:ring-2 focus:ring-[#FF8C42]/50 outline-none transition' },
+                children
+            )
+        );
+        
+        const Filters = ({ teams, filters, onFilterChange }) => {
+            const handlePositionChange = (evt) => onFilterChange({ ...filters, position: evt.target.value });
+            const handleTeamChange = (evt) => onFilterChange({ ...filters, team: evt.target.value });
+            const handleSortByChange = (evt) => onFilterChange({ ...filters, sortBy: evt.target.value });
+
+            return e('section', { className: 'bg-white/95 p-5 rounded-2xl shadow-lg flex flex-wrap gap-5 my-8' },
+                e(FilterSelect, { label: 'Posição', value: filters.position, onChange: handlePositionChange },
+                    e('option', { value: 'all' }, 'Todas as Posições'),
+                    e('option', { value: 'MEI' }, 'Meia (MEI)'),
+                    e('option', { value: 'ATA' }, 'Atacante (ATA)')
+                ),
+                e(FilterSelect, { label: 'Time', value: filters.team, onChange: handleTeamChange },
+                    e('option', { value: 'all' }, 'Todos os Times'),
+                    teams.map(team => e('option', { key: team, value: team }, team))
+                ),
+                e(FilterSelect, { label: 'Ordenar por', value: filters.sortBy, onChange: handleSortByChange },
+                    e('option', { value: 'media' }, 'Média (Maior para Menor)'),
+                    e('option', { value: 'gols' }, 'Gols (Maior para Menor)'),
+                    e('option', { value: 'assistencias' }, 'Assistências (Maior para Menor)'),
+                    e('option', { value: 'nome' }, 'Nome (A-Z)')
+                )
+            );
+        };
+        
+        // --- From components/PlayersTable.tsx ---
+        const PositionBadge = ({ position }) => {
+            const baseClasses = "inline-block px-3 py-1 text-xs font-bold text-white rounded-full uppercase";
+            const positionClasses = {
+                [Position.MEI]: "bg-gradient-to-r from-green-500 to-emerald-500",
+                [Position.ATA]: "bg-gradient-to-r from-blue-500 to-sky-500",
+            };
+            return e('span', { className: \`\${baseClasses} \${positionClasses[position]}\` }, position);
+        };
+
+        const PlayersTable = ({ players }) => {
+            return e('section', { className: 'overflow-hidden rounded-2xl shadow-lg bg-white/95' },
+                e('div', { className: 'overflow-x-auto' },
+                    e('table', { className: 'w-full min-w-max text-left' },
+                        e('thead', null,
+                            e('tr', { className: 'bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white' },
+                                e('th', { className: 'p-4 font-semibold' }, 'Posição'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Jogador'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Time'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Média'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Gols'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Assistências'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Fonte')
+                            )
+                        ),
+                        e('tbody', null,
+                            players.map((player, index) => e('tr', { key: \`\${player.nome}-\${index}\`, className: 'border-b border-orange-100 hover:bg-orange-50/50 transition-colors' },
+                                e('td', { className: 'p-4' }, e(PositionBadge, { position: player.posicao })),
+                                e('td', { className: 'p-4 font-medium' }, player.nome),
+                                e('td', { className: 'p-4' }, player.time),
+                                e('td', { className: 'p-4' }, player.media?.toFixed(2) ?? '-'),
+                                e('td', { className: 'p-4' }, player.gols ?? '-'),
+                                e('td', { className: 'p-4' }, player.assistencias ?? '-'),
+                                e('td', { className: 'p-4 text-sm text-gray-600' }, player.fonte)
+                            ))
+                        )
+                    )
+                )
+            );
+        };
+
+        // --- From App.tsx ---
+        const App = () => {
+            const [filters, setFilters] = useState({ position: 'all', team: 'all', sortBy: 'media' });
+            const [variations, setVariations] = useState(null);
+
+            const uniqueTeams = useMemo(() => {
+                return [...new Set(PLAYERS_DATA.map((p) => p.time))].sort();
+            }, []);
+
+            const filteredPlayers = useMemo(() => {
+                let players = PLAYERS_DATA.filter((player) => {
+                    const positionMatch = filters.position === 'all' || player.posicao === filters.position;
+                    const teamMatch = filters.team === 'all' || player.time === filters.team;
+                    return positionMatch && teamMatch;
+                });
+
+                players.sort((a, b) => {
+                    switch (filters.sortBy) {
+                        case 'media': return (b.media ?? 0) - (a.media ?? 0);
+                        case 'gols': return (b.gols ?? 0) - (a.gols ?? 0);
+                        case 'assistencias': return (b.assistencias ?? 0) - (a.assistencias ?? 0);
+                        case 'nome': return a.nome.localeCompare(b.nome);
+                        default: return 0;
+                    }
+                });
+                return players;
+            }, [filters]);
+
+            const handleGenerateVariations = useCallback(() => {
+                const playersFromSgTeams = PLAYERS_DATA.filter(player => SG_TEAMS.includes(player.time));
+                const midfielders = playersFromSgTeams.filter(p => p.posicao === Position.MEI);
+                const attackers = playersFromSgTeams.filter(p => p.posicao === Position.ATA);
+                const newVariations = [];
+
+                for (let i = 1; i <= 3; i++) {
+                    const shuffledMid = [...midfielders].sort(() => 0.5 - Math.random());
+                    const shuffledAtk = [...attackers].sort(() => 0.5 - Math.random());
+                    newVariations.push({
+                        id: i,
+                        midfielders: shuffledMid.slice(0, 3),
+                        attackers: shuffledAtk.slice(0, 3),
+                    });
+                }
+                setVariations(newVariations);
+                setTimeout(() => {
+                    document.getElementById('variationsSection')?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }, []);
+
+            return e('div', { className: 'bg-gradient-to-br from-[#FF8C42] to-[#000000] min-h-screen font-sans text-[#1A1A1A]' },
+                e('div', { className: 'container mx-auto max-w-7xl p-2 sm:p-5' },
+                    e(Header),
+                    e('main', null,
+                        e(DashboardCharts, { players: filteredPlayers }),
+                        e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow' }, 'Top 5 Segurança de Gols (SG)'),
+                        e(SgSection, { sgData: SG_PROBABILITY_DATA }),
+                        e('div', { className: 'flex justify-center my-8' },
+                            e('button', { onClick: handleGenerateVariations, className: 'bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out flex items-center gap-2' },
+                                e('i', { className: 'fa-solid fa-dice' }),
+                                'Gerar Variações de Escalação'
+                            )
+                        ),
+                        variations && e(VariationsSection, { variations: variations }),
+                        e(Filters, { teams: uniqueTeams, filters: filters, onFilterChange: setFilters }),
+                        e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow' }, 'Top 20 Jogadores'),
+                        e(PlayersTable, { players: filteredPlayers })
+                    ),
+                    e(Footer)
+                )
+            );
+        };
+        
+        // --- From index.tsx ---
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(e(App));
+
+    </script>
+</body>
+</html>`,
+            'components/Card.tsx': `
+import React from 'react';
+
+interface CardProps {
+    children: React.ReactNode;
+    title?: string;
+    icon?: React.ReactNode;
+    className?: string;
+}
+
+const Card: React.FC<CardProps> = ({ children, title, icon, className = '' }) => {
+    return (
+        <div className={\`bg-white/95 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-shadow duration-300 transform hover:-translate-y-1 \${className}\`}>
+            {title && (
+                <h2 className="text-xl font-bold text-[#FF8C42] mb-5 pb-3 border-b-2 border-[#FFA85C] flex items-center">
+                    {icon && <span className="mr-3 text-lg">{icon}</span>}
+                    {title}
+                </h2>
+            )}
+            {children}
+        </div>
+    );
+};
+
+export default Card;`,
+            'components/Header.tsx': `
+import React from 'react';
+
+interface HeaderProps {
+    marketStatus: number | null;
+    roundNumber: number | null;
+}
+
+const Header: React.FC<HeaderProps> = ({ marketStatus, roundNumber }) => {
+
+    const handleShare = async () => {
+        try {
+            const response = await fetch('/shareable.html');
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const htmlContent = await response.text();
+            const file = new File([htmlContent], 'cartola-dashboard.html', { type: 'text/html' });
+
+            // Use Web Share API if available and can share files
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: 'Cartola FC Dashboard',
+                    text: 'Confira este dashboard interativo do Cartola FC!',
+                });
+            } else {
+                // Fallback to download for desktop or unsupported mobile browsers
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cartola-dashboard.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        } catch (error) {
+            // Don't show an alert if the user cancels the share dialog
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                console.log('Share action was cancelled by the user.');
+            } else {
+                console.error('Failed to share or download file:', error);
+                alert('Não foi possível compartilhar ou baixar o arquivo. Por favor, tente novamente.');
+            }
+        }
+    };
+
+    const marketStatusColor = marketStatus === 1 ? "text-green-600" : "text-red-600";
+    const marketStatusIndicator = marketStatus === 1 ? "bg-green-500" : "bg-red-500";
+
+
+    return (
+        <header className="text-center p-8 mb-8 bg-white rounded-2xl shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C]"></div>
+            
+            <button 
+                onClick={handleShare}
+                title="Compartilhar ou baixar o dashboard"
+                className="absolute top-4 right-4 bg-gray-100 hover:bg-gray-200 text-[#FF8C42] font-bold p-3 rounded-full shadow-md hover:shadow-lg transition-all duration-300 ease-in-out flex items-center justify-center w-12 h-12"
+                aria-label="Compartilhar dashboard"
+            >
+                <i className="fas fa-share-alt text-xl"></i>
+            </button>
+
+            <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-gray-800 uppercase tracking-wide">
+                CARTOLA FC - TIMES TIRO CURTO VERSÃO <span className="text-[#FF8C42]">(BETA)</span>
+            </h1>
+            <p className="text-lg md:text-xl text-gray-600 font-medium">
+                Dashboard com análise dos melhores jogadores e Times Para TIRO CURTO
+            </p>
+            {marketStatus !== null && roundNumber !== null && (
+                 <div className="mt-4 flex items-center justify-center gap-2 text-lg">
+                    <span className={\`relative flex h-3 w-3\`}>
+                        <span className={\`animate-ping absolute inline-flex h-full w-full rounded-full \${marketStatusIndicator} opacity-75\`}></span>
+                        <span className={\`relative inline-flex rounded-full h-3 w-3 \${marketStatusIndicator}\`}></span>
+                    </span>
+                    <span className={\`font-bold \${marketStatusColor}\`}>
+                        {marketStatus === 1
+                            ? \`Mercado Aberto para a Rodada \${roundNumber}\`
+                            : \`Mercado Fechado (Rodada \${roundNumber} em andamento)\`}
+                    </span>
+                </div>
+            )}
+        </header>
+    );
+};
+
+export default Header;`,
+            'components/Footer.tsx': `
+import React from 'react';
+
+const Footer: React.FC = () => {
+    return (
+        <footer className="text-center p-6 mt-10 border-t-2 border-[#FFA85C]">
+            <p className="text-white opacity-90">
+                Dados da Rodada 25 do Cartola FC | Desenvolvido para análise de desempenho (Jeffinho do Cartola)
+            </p>
+        </footer>
+    );
+};
+
+export default Footer;`,
+            'components/DashboardCharts.tsx': `
+import React, { useMemo } from 'react';
+import type { ProcessedPlayer } from '../types';
+import Card from './Card';
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+
+interface DashboardChartsProps {
+    players: ProcessedPlayer[];
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-gray-700/90 p-4 rounded-lg border border-gray-600 shadow-xl text-white">
+        <p className="font-bold text-base mb-2">{data.nome}</p>
+        <p className="text-sm text-gray-300 mb-2">{data.time}</p>
+        {payload.map((pld: any, index: number) => (
+             <p key={index} style={{ color: pld.stroke || pld.fill }} className="font-semibold">{\`\${pld.name}: \${pld.value.toFixed(2)}\`}</p>
+        ))}
+        <div className="mt-2 pt-2 border-t border-gray-500">
+            <p className={\`text-sm \${data.potencial > data.media ? 'text-green-400' : 'text-red-400'}\`}>
+                Diferença: {(data.potencial - data.media).toFixed(2)}
+            </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+
+const DashboardCharts: React.FC<DashboardChartsProps> = ({ players }) => {
+    const chartData = useMemo(() => {
+        return players.slice(0, 15).map(p => ({
+            ...p,
+            name: p.nome.split(' ')[0], // Use first name for brevity
+            pontosExtras: Math.max(0, p.media - p.mediaBasica),
+        }));
+    }, [players]);
+
+    const averagePotencial = useMemo(() => {
+        if (chartData.length === 0) return 0;
+        const total = chartData.reduce((sum, p) => sum + p.potencial, 0);
+        return total / chartData.length;
+    }, [chartData]);
+
+    return (
+        <section className="grid md:grid-cols-2 gap-6 mb-8">
+            <Card title="Composição da Média dos Jogadores" icon={<i className="fas fa-chart-bar"></i>}>
+                <div className="w-full h-96">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart 
+                            layout="vertical" 
+                            data={chartData.slice().reverse()} // Reverse for top player to be at the top
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" hide />
+                            <YAxis 
+                                type="category" 
+                                dataKey="name" 
+                                width={80} 
+                                tick={{ fontSize: 12, fill: '#374151' }} 
+                                tickLine={false} 
+                                axisLine={false} 
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 140, 66, 0.1)' }} />
+                            <Legend wrapperStyle={{ paddingTop: '15px' }} />
+                            <Bar dataKey="mediaBasica" name="Média Básica" stackId="a" fill="#4A90E2" radius={[5, 0, 0, 5]} barSize={15} />
+                            <Bar dataKey="pontosExtras" name="Pts. Ofensivos (G, A)" stackId="a" fill="#FFA85C" radius={[0, 5, 5, 0]} barSize={15} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </Card>
+            <Card title="Potencial vs. Média (Top 15)" icon={<i className="fas fa-chart-line"></i>} className="bg-gray-800">
+                <div className="w-full h-96">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart 
+                            data={chartData} 
+                            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                        >
+                             <defs>
+                                <linearGradient id="colorPotencial" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#FF8C42" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="#FF8C42" stopOpacity={0.1}/>
+                                </linearGradient>
+                                <linearGradient id="colorMedia" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#4A90E2" stopOpacity={0.7}/>
+                                    <stop offset="95%" stopColor="#4A90E2" stopOpacity={0.1}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#A0AEC0' }} />
+                            <YAxis tick={{ fontSize: 12, fill: '#A0AEC0' }} />
+                            <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#FF8C42', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                            <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '15px', color: '#E2E8F0' }}/>
+                            <ReferenceLine y={averagePotencial} label={{ value: \`Média Pot. \${averagePotencial.toFixed(2)}\`, position: 'insideTopLeft', fill: '#A0AEC0', fontSize: 10 }} stroke="#A0AEC0" strokeDasharray="4 4" />
+                            <Area 
+                                type="monotone" 
+                                dataKey="potencial" 
+                                name="Potencial" 
+                                stroke="#FF8C42" 
+                                strokeWidth={3} 
+                                fill="url(#colorPotencial)" 
+                                dot={{ stroke: '#FF8C42', strokeWidth: 2, fill: '#1A202C', r: 4 }}
+                                activeDot={{ r: 6, fill: '#FF8C42' }}
+                            />
+                            <Area 
+                                type="monotone" 
+                                dataKey="media" 
+                                name="Média" 
+                                stroke="#4A90E2" 
+                                strokeWidth={2} 
+                                fill="url(#colorMedia)"
+                                dot={{ stroke: '#4A90E2', strokeWidth: 1, fill: '#1A202C', r: 3 }}
+                                activeDot={{ r: 5, fill: '#4A90E2' }}
+                             />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </Card>
+        </section>
+    );
+};
+
+export default DashboardCharts;`,
+            'components/SgSection.tsx': `
+import React from 'react';
+import type { SgTeam } from '../types';
+import Card from './Card';
+
+interface SgSectionProps {
+    sgData: SgTeam[];
+    onEdit: () => void;
+    isAdmin: boolean;
+}
+
+const SgSection: React.FC<SgSectionProps> = ({ sgData, onEdit, isAdmin }) => {
+    
+    const validData = sgData && sgData.length > 0 ? sgData : [];
+    
+    const getTopStat = (stat: 'probability' | 'width') => {
+        if (validData.length === 0) return 'N/A';
+        const values = validData.map(d => parseInt(d[stat], 10) || 0);
+        return \`\${Math.max(...values)}%\`;
+    }
+
+     const getMinStat = () => {
+        if (validData.length === 0) return 'N/A';
+        const values = validData.map(d => parseInt(d.width, 10) || 0);
+        return \`\${Math.min(...values)}%\`;
+    }
+
+    const cardTitle = (
+        <div className="flex justify-between items-center w-full">
+            <div className="flex items-center">
+                <span className="mr-3 text-lg"><i className="fas fa-shield-alt"></i></span>
+                Times com Maior Probabilidade de SG
+            </div>
+            {isAdmin && (
+                <button 
+                    onClick={onEdit}
+                    className="text-gray-400 hover:text-[#FF8C42] transition-colors p-2 -mr-2"
+                    aria-label="Editar dados de SG"
+                    title="Gerenciar times com chance de SG"
+                >
+                    <i className="fas fa-cog"></i>
+                </button>
+            )}
+        </div>
+    );
+
+    return (
+        <Card title={cardTitle}>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-max text-left">
+                    <thead >
+                        <tr >
+                           <th className="p-4 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-semibold rounded-tl-lg">Time</th>
+                           <th className="p-4 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-semibold">Probabilidade de Vitória</th>
+                           <th className="p-4 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-semibold rounded-tr-lg">Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {validData.map((team, index) => (
+                            <tr key={index} className="border-b border-orange-100 hover:bg-orange-50/50 transition-colors">
+                                <td className="p-4 font-medium">{team.team}</td>
+                                <td className="p-4">
+                                    <span>{team.probability}</span>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                                        <div 
+                                            className="bg-gradient-to-r from-green-400 to-lime-500 h-2.5 rounded-full" 
+                                            style={{ width: team.width }}>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="p-4 text-gray-600">{team.observation}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+             <div className="flex justify-around text-center mt-6">
+                <div className="flex-1 p-4">
+                    <span className="block text-4xl font-bold text-[#FF8C42]">{getTopStat('width')}</span>
+                    <span className="text-sm text-gray-600">Maior Probabilidade</span>
+                </div>
+                <div className="flex-1 p-4 border-x border-gray-200">
+                    <span className="block text-4xl font-bold text-[#FF8C42]">{validData.length}</span>
+                    <span className="text-sm text-gray-600">Times Recomendados</span>
+                </div>
+                <div className="flex-1 p-4">
+                    <span className="block text-4xl font-bold text-[#FF8C42]">{getMinStat()}</span>
+                    <span className="text-sm text-gray-600">Probabilidade Mínima</span>
+                </div>
+            </div>
+        </Card>
+    );
+};
+
+export default SgSection;`,
+            'components/VariationsSection.tsx': `
+import React from 'react';
+import type { ProcessedPlayer, FullLineupVariation } from '../types';
+
+interface VariationsSectionProps {
+    variations: FullLineupVariation[];
+}
+
+const PlayerRow: React.FC<{ player: ProcessedPlayer, showTeam?: boolean }> = ({ player, showTeam = false }) => (
+    <div className="flex justify-between items-center py-1.5 border-b border-gray-100 last:border-b-0 text-sm">
+        <span className="font-semibold text-gray-800 flex items-center gap-2">
+            {player.nome}
+            {player.isChosenFromDoubt && (
+                <i 
+                    className="fas fa-question-circle text-yellow-500" 
+                    title="Jogador escalado como Dúvida com maior média"
+                ></i>
+            )}
+            <span className="text-gray-500 font-normal">({player.posicao})</span>
+        </span>
+        <div className="flex items-center gap-2 text-gray-600">
+            {showTeam && (
+                 <img src={player.timeEscudo} alt={player.time} className="w-4 h-4 object-contain" />
+            )}
+           <span>M: {player.media?.toFixed(2) ?? '-'}</span>
+        </div>
+    </div>
+);
+
+const PositionGroup: React.FC<{ title: string; players: ProcessedPlayer[], showTeam?: boolean }> = ({ title, players, showTeam = false }) => (
+    <div>
+        <h4 className="font-bold text-gray-600 text-sm mt-3 mb-1 uppercase tracking-wider">{title}</h4>
+        {players.length > 0 ? (
+            players.map(player => <PlayerRow key={player.id} player={player} showTeam={showTeam} />)
+        ) : (
+            <p className="text-xs text-gray-400 italic">N/A</p>
+        )}
+    </div>
+);
+
+
+const VariationCard: React.FC<{ variation: FullLineupVariation }> = ({ variation }) => (
+    <div className="bg-white/95 rounded-2xl p-5 shadow-lg border-t-4 border-[#FF8C42]">
+        <div className="text-center mb-4">
+            <h3 className="text-lg font-bold text-gray-800">{variation.title}</h3>
+            <p className="text-sm text-gray-500">{variation.description}</p>
+        </div>
+        
+        <div className="flex items-center gap-3 p-2 bg-gray-100 rounded-lg mb-3">
+             <img src={variation.defenseTeam.shield} alt={variation.defenseTeam.name} className="w-8 h-8"/>
+             <span className="font-bold text-gray-700">Defesa Fechada: {variation.defenseTeam.name}</span>
+        </div>
+
+        <div>
+            <PositionGroup title="Goleiro" players={variation.goalkeeper} />
+            <PositionGroup title="Defensores" players={variation.defenders} />
+            <PositionGroup title="Meio-Campo" players={variation.midfielders} showTeam />
+            <PositionGroup title="Ataque" players={variation.attackers} showTeam />
+            <PositionGroup title="Técnico" players={variation.coach} />
+        </div>
+    </div>
+);
+
+const VariationsSection: React.FC<VariationsSectionProps> = ({ variations }) => {
+    if (!variations || variations.length === 0) {
+        return (
+            <div className="text-center p-8 bg-gray-50 rounded-lg">
+                <i className="fas fa-exclamation-triangle text-3xl text-yellow-500 mb-4"></i>
+                <h3 className="text-xl font-bold text-gray-700">Não foi possível gerar variações</h3>
+                <p className="text-gray-500 mt-2">Verifique se existem jogadores prováveis suficientes para a defesa e o ataque.</p>
+            </div>
+        )
+    }
+    
+    return (
+        <section id="variationsSection">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {variations.map(v => <VariationCard key={v.id} variation={v} />)}
+            </div>
+        </section>
+    );
+};
+
+export default VariationsSection;`,
+            'components/Filters.tsx': `
+import React from 'react';
+import { Position } from '../types';
+
+interface FiltersProps {
+    teams: string[];
+    filters: {
+        position: string;
+        team: string;
+        sortBy: string;
+    };
+    onFilterChange: (filters: { position: string; team: string; sortBy: string; }) => void;
+}
+
+const FilterSelect: React.FC<{
+    label: string;
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    children: React.ReactNode;
+}> = ({ label, value, onChange, children }) => (
+    <div className="flex flex-col flex-1 min-w-[180px]">
+        <label className="mb-2 font-semibold text-[#FF8C42]">{label}</label>
+        <select
+            value={value}
+            onChange={onChange}
+            className="p-3 rounded-lg border-2 border-[#FFA85C] focus:border-[#FF8C42] focus:ring-2 focus:ring-[#FF8C42]/50 outline-none transition"
+        >
+            {children}
+        </select>
+    </div>
+);
+
+
+const Filters: React.FC<FiltersProps> = ({ teams, filters, onFilterChange }) => {
+    
+    const handlePositionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onFilterChange({ ...filters, position: e.target.value });
+    };
+
+    const handleTeamChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onFilterChange({ ...filters, team: e.target.value });
+    };
+
+    const handleSortByChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onFilterChange({ ...filters, sortBy: e.target.value });
+    };
+
+    return (
+        <section className="bg-white/95 p-5 rounded-2xl shadow-lg flex flex-wrap gap-5 my-8">
+            <FilterSelect label="Posição" value={filters.position} onChange={handlePositionChange}>
+                <option value="all">Todas as Posições</option>
+                <option value={Position.GOL}>Goleiro (GOL)</option>
+                <option value={Position.LAT}>Lateral (LAT)</option>
+                <option value={Position.ZAG}>Zagueiro (ZAG)</option>
+                <option value={Position.MEI}>Meia (MEI)</option>
+                <option value={Position.ATA}>Atacante (ATA)</option>
+                <option value={Position.TEC}>Técnico (TEC)</option>
+            </FilterSelect>
+            <FilterSelect label="Time" value={filters.team} onChange={handleTeamChange}>
+                <option value="all">Todos os Times</option>
+                {teams.map(team => <option key={team} value={team}>{team}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Ordenar por" value={filters.sortBy} onChange={handleSortByChange}>
+                <option value="potencial">Potencial</option>
+                <option value="media">Média (Maior para Menor)</option>
+                <option value="mediaBasica">Média Básica (Maior para Menor)</option>
+                <option value="gols">Gols (Maior para Menor)</option>
+                <option value="assistencias">Assistências (Maior para Menor)</option>
+                <option value="desarmes">Desarmes (Maior para Menor)</option>
+                <option value="nome">Nome (A-Z)</option>
+            </FilterSelect>
+        </section>
+    );
+};
+
+export default Filters;`,
+            'components/PlayersTable.tsx': `
+import React from 'react';
+import type { ProcessedPlayer } from '../types';
+import { Position } from '../types';
+
+interface PlayersTableProps {
+    players: ProcessedPlayer[];
+    onPlayerClick: (player: ProcessedPlayer) => void;
+}
+
+const PositionBadge: React.FC<{ position: Position }> = ({ position }) => {
+    const baseClasses = "inline-block px-3 py-1 text-xs font-bold text-white rounded-full uppercase";
+    const positionClasses: Record<Position, string> = {
+        [Position.GOL]: "bg-gradient-to-r from-yellow-500 to-amber-500",
+        [Position.LAT]: "bg-gradient-to-r from-cyan-500 to-blue-500",
+        [Position.ZAG]: "bg-gradient-to-r from-indigo-500 to-purple-500",
+        [Position.MEI]: "bg-gradient-to-r from-green-500 to-emerald-500",
+        [Position.ATA]: "bg-gradient-to-r from-rose-500 to-pink-500",
+        [Position.TEC]: "bg-gradient-to-r from-gray-500 to-slate-500",
+    };
+    return <span className={\`\${baseClasses} \${positionClasses[position]}\`}>{position}</span>;
+};
+
+const PlayersTable: React.FC<PlayersTableProps> = ({ players, onPlayerClick }) => {
+    return (
+        <section className="overflow-hidden rounded-2xl shadow-lg bg-white/95">
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-max text-left">
+                    <thead>
+                        <tr className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white">
+                            <th className="p-4 font-semibold">Posição</th>
+                            <th className="p-4 font-semibold">Jogador</th>
+                            <th className="p-4 font-semibold">Time</th>
+                            <th className="p-4 font-semibold">Potencial</th>
+                            <th className="p-4 font-semibold">Média</th>
+                            <th className="p-4 font-semibold">M. Básica</th>
+                            <th className="p-4 font-semibold">Gols</th>
+                            <th className="p-4 font-semibold">Assist.</th>
+                            <th className="p-4 font-semibold">Desarmes</th>
+                            <th className="p-4 font-semibold">RB</th>
+                            <th className="p-4 font-semibold">CA</th>
+                            <th className="p-4 font-semibold">CV</th>
+                            <th className="p-4 font-semibold">FC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {players.slice(0, 20).map((player) => (
+                            <tr 
+                                key={player.id} 
+                                className="border-b border-orange-100 hover:bg-orange-50/50 transition-colors cursor-pointer"
+                                onClick={() => onPlayerClick(player)}
+                            >
+                                <td className="p-4"><PositionBadge position={player.posicao} /></td>
+                                <td className="p-4 font-medium">{player.nome}</td>
+                                <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                        <img src={player.timeEscudo} alt={player.time} className="w-6 h-6 object-contain" />
+                                        <span>{player.time}</span>
+                                    </div>
+                                </td>
+                                <td className="p-4 font-bold text-[#FF8C42]">{player.potencial?.toFixed(2) ?? '-'}</td>
+                                <td className="p-4">{player.media?.toFixed(2) ?? '-'}</td>
+                                <td className="p-4">{player.mediaBasica?.toFixed(2) ?? '-'}</td>
+                                <td className="p-4">{player.gols ?? '-'}</td>
+                                <td className="p-4">{player.assistencias ?? '-'}</td>
+                                <td className="p-4">{player.desarmes ?? '-'}</td>
+                                <td className="p-4">{player.roubosDeBola ?? '-'}</td>
+                                <td className="p-4">{player.cartoesAmarelos ?? '-'}</td>
+                                <td className="p-4">{player.cartoesVermelhos ?? '-'}</td>
+                                <td className="p-4">{player.faltasCometidas ?? '-'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+};
+
+export default PlayersTable;`,
+            'components/MatchesSection.tsx': `
+import React from 'react';
+import type { Match, ClubsMap } from '../types';
+import Card from './Card';
+
+interface MatchesSectionProps {
+    matches: Match[];
+    clubs: ClubsMap;
+    onMatchClick: (match: Match) => void;
+}
+
+const MatchesSection: React.FC<MatchesSectionProps> = ({ matches, clubs, onMatchClick }) => {
+    if (!matches.length || !Object.keys(clubs).length) {
+        return null;
+    }
+
+    const formatDate = (dateString: string) => {
+        const options: Intl.DateTimeFormatOptions = {
+            weekday: 'short',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+        return new Date(dateString).toLocaleString('pt-BR', options).replace(',', ' -');
+    };
+
+    return (
+        <Card title="Jogos da Rodada" icon={<i className="fas fa-calendar-alt"></i>} className="mb-8">
+            <div className="space-y-4">
+                {matches.map((match, index) => {
+                    const homeTeam = clubs[match.clube_casa_id];
+                    const awayTeam = clubs[match.clube_visitante_id];
+
+                    if (!homeTeam || !awayTeam) return null;
+
+                    return (
+                        <div 
+                            key={index} 
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
+                            onClick={() => onMatchClick(match)}
+                        >
+                            <div className="flex items-center gap-3 w-2/5 justify-end">
+                                <span className="font-bold text-right hidden sm:inline">{homeTeam.nome}</span>
+                                <span className="font-bold text-right sm:hidden">{homeTeam.abreviacao}</span>
+                                <img src={homeTeam.escudos['30x30']} alt={homeTeam.nome} className="w-8 h-8 object-contain"/>
+                            </div>
+                            <div className="text-center text-gray-700 font-mono px-2">
+                                <span className="font-bold text-lg">vs</span>
+                                <div className="text-xs text-gray-500 whitespace-nowrap">{formatDate(match.partida_data)}</div>
+                            </div>
+                             <div className="flex items-center gap-3 w-2/5">
+                                <img src={awayTeam.escudos['30x30']} alt={awayTeam.nome} className="w-8 h-8 object-contain"/>
+                                 <span className="font-bold text-left hidden sm:inline">{awayTeam.nome}</span>
+                                 <span className="font-bold text-left sm:hidden">{awayTeam.abreviacao}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </Card>
+    );
+};
+
+export default MatchesSection;`,
+            'components/ProbableLineup.tsx': `
+import React, { useState, useMemo } from 'react';
+import type { Match, ClubsMap, ProcessedPlayer } from '../types';
+import { Position } from '../types';
+
+const PositionBadge: React.FC<{ position: Position }> = ({ position }) => {
+    const baseClasses = "inline-block px-2 py-0.5 text-xs font-bold text-white rounded-full uppercase";
+    const positionClasses: Record<Position, string> = {
+        'GOL': "bg-yellow-500",
+        'LAT': "bg-blue-500",
+        'ZAG': "bg-indigo-500",
+        'MEI': "bg-green-500",
+        'ATA': "bg-red-500",
+        'TEC': "bg-gray-500",
+    };
+    return <span className={\`\${baseClasses} \${positionClasses[position]}\`}>{position}</span>;
+};
+
+const PlayerAlternativeRow: React.FC<{ player: ProcessedPlayer }> = ({ player }) => {
+    const statusColor: { [key: string]: string } = {
+        'Provável': 'text-green-600',
+        'Dúvida': 'text-yellow-600',
+        'Suspenso': 'text-red-600',
+        'Contundido': 'text-red-600',
+        'Nulo': 'text-gray-500',
+    };
+    return (
+        <li className="flex items-center justify-between p-2 rounded-md">
+            <span className="font-medium text-gray-700">{player.nome}</span>
+            <div className="flex items-center gap-3 text-sm">
+                <span className={\`font-bold \${statusColor[player.status] || 'text-gray-500'}\`}>{player.status}</span>
+                <span>Média: {player.media.toFixed(2)}</span>
+            </div>
+        </li>
+    );
+};
+
+const TeamLineup: React.FC<{ teamId: number; clubs: ClubsMap; players: ProcessedPlayer[] }> = ({ teamId, clubs, players }) => {
+    const [focusedPosition, setFocusedPosition] = useState<Position | null>(null);
+    const team = clubs[teamId];
+
+    const displayLineup = useMemo(() => {
+        const teamPlayers = players.filter(p => p.clubeId === teamId);
+    
+        // 1. Get all probable and doubt players, with doubts sorted by media
+        const provaveis = teamPlayers.filter(p => p.status === 'Provável');
+        const duvidas = teamPlayers.filter(p => p.status === 'Dúvida').sort((a, b) => b.media - a.media);
+    
+        // 2. Find the coach separately
+        let lineupCoach = provaveis.find(p => p.posicao === Position.TEC);
+        if (!lineupCoach) {
+            const doubtCoach = duvidas.find(p => p.posicao === Position.TEC);
+            if (doubtCoach) {
+                lineupCoach = { ...doubtCoach, isChosenFromDoubt: true };
+            }
+        }
+    
+        // 3. Start field lineup with probable players
+        let fieldLineup = provaveis.filter(p => p.posicao !== Position.TEC);
+        
+        // 4. Fill remaining 11 slots with the best doubt players
+        const neededPlayers = 11 - fieldLineup.length;
+        if (neededPlayers > 0) {
+            const doubtFieldPlayers = duvidas.filter(p => p.posicao !== Position.TEC && !lineupCoach || (lineupCoach && p.id !== lineupCoach.id));
+            const bestDuvidas = doubtFieldPlayers.slice(0, neededPlayers).map(p => ({ ...p, isChosenFromDoubt: true }));
+            fieldLineup.push(...bestDuvidas);
+        }
+        
+        // 5. Combine and sort
+        const finalLineup: ProcessedPlayer[] = [...fieldLineup];
+        if (lineupCoach) {
+            finalLineup.push(lineupCoach);
+        }
+    
+        const posOrder: Record<Position, number> = { [Position.GOL]: 1, [Position.ZAG]: 2, [Position.LAT]: 3, [Position.MEI]: 4, [Position.ATA]: 5, [Position.TEC]: 6 };
+        return finalLineup.sort((a, b) => posOrder[a.posicao] - posOrder[b.posicao]);
+        
+    }, [teamId, players]);
+    
+    const alternativePlayers = useMemo(() => {
+        if (!focusedPosition) return [];
+        return players
+            .filter(p => p.clubeId === teamId && p.posicao === focusedPosition)
+            .sort((a, b) => {
+                const statusOrder: { [key: string]: number } = { 'Provável': 1, 'Dúvida': 2 };
+                const aStatus = statusOrder[a.status] || 99;
+                const bStatus = statusOrder[b.status] || 99;
+                if (aStatus !== bStatus) return aStatus - bStatus;
+                return b.media - a.media;
+            });
+    }, [focusedPosition, teamId, players]);
+
+    if (!team) return null;
+
+    if (focusedPosition) {
+        return (
+            <div className="flex-1">
+                 <div className="flex items-center justify-between gap-3 mb-4">
+                    <button 
+                        onClick={() => setFocusedPosition(null)}
+                        className="text-sm font-semibold text-[#FF8C42] hover:text-orange-700 p-2 -ml-2"
+                        aria-label="Voltar para a escalação completa"
+                    >
+                        <i className="fas fa-arrow-left mr-2"></i>Voltar
+                    </button>
+                    <div className="text-right">
+                        <h3 className="text-xl font-bold text-gray-800">{team.nome}</h3>
+                        <p className="text-sm font-semibold text-gray-600">Opções para {focusedPosition}</p>
+                    </div>
+                </div>
+                {alternativePlayers.length > 0 ? (
+                    <ul className="space-y-1 bg-gray-50 p-2 rounded-lg">
+                        {alternativePlayers.map(player => (
+                           <PlayerAlternativeRow key={player.id} player={player} />
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-center text-gray-500 italic p-4">Nenhum jogador encontrado para esta posição.</p>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex-1">
+            <div className="flex items-center gap-3 mb-4 p-2 bg-gray-100 rounded-lg">
+                <img src={team.escudos['45x45']} alt={team.nome} className="w-10 h-10 object-contain" />
+                <h3 className="text-xl font-bold text-gray-800">{team.nome}</h3>
+            </div>
+            {displayLineup.length > 0 ? (
+                <ul className="space-y-2">
+                    {displayLineup.map(player => (
+                        <li 
+                            key={player.id} 
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
+                            onClick={() => setFocusedPosition(player.posicao)}
+                            title={\`Ver outras opções para \${player.posicao}\`}
+                        >
+                            <span className="font-medium text-gray-700 flex items-center gap-2">
+                                {player.nome}
+                                {player.isChosenFromDoubt && (
+                                    <i className="fas fa-question-circle text-yellow-500" title="Jogador escalado como Dúvida com maior média"></i>
+                                )}
+                            </span>
+                            <PositionBadge position={player.posicao} />
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-center text-gray-500 italic p-4">Nenhuma escalação provável disponível.</p>
+            )}
+        </div>
+    );
+};
+
+interface ProbableLineupProps {
+    match: Match;
+    clubs: ClubsMap;
+    players: ProcessedPlayer[];
+    lastUpdated: Date | null;
+}
+
+const ProbableLineup: React.FC<ProbableLineupProps> = ({ match, clubs, players, lastUpdated }) => {
+    
+    const formatLastUpdated = (date: Date | null) => {
+        if (!date) return '';
+        const dateOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+        const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+        return \`Atualizado em: \${date.toLocaleDateString('pt-BR', dateOptions)} às \${date.toLocaleTimeString('pt-BR', timeOptions)}\`;
+    };
+    
+    return (
+        <div>
+            {lastUpdated && (
+                <div className="text-center mb-4 pb-4 border-b border-gray-200">
+                    <p className="text-sm text-green-700 bg-green-100 p-2 rounded-lg inline-flex items-center gap-2 shadow-sm">
+                        <i className="fas fa-sync-alt fa-spin"></i>
+                        <span>{formatLastUpdated(lastUpdated)}</span>
+                    </p>
+                </div>
+            )}
+            <div className="flex flex-col md:flex-row gap-8">
+                <TeamLineup teamId={match.clube_casa_id} clubs={clubs} players={players} />
+                <div className="border-l border-gray-200 hidden md:block mx-2"></div>
+                <TeamLineup teamId={match.clube_visitante_id} clubs={clubs} players={players} />
+            </div>
+        </div>
+    );
+};
+
+export default ProbableLineup;`,
+            'components/PlayerScoutDetail.tsx': `
+import React from 'react';
+import type { ProcessedPlayer } from '../types';
+import { Position } from '../types';
+
+const PositionBadge: React.FC<{ position: Position }> = ({ position }) => {
+    const baseClasses = "inline-block px-3 py-1 text-xs font-bold text-white rounded-full uppercase";
+    const positionClasses: Record<Position, string> = {
+        [Position.GOL]: "bg-gradient-to-r from-yellow-500 to-amber-500",
+        [Position.LAT]: "bg-gradient-to-r from-cyan-500 to-blue-500",
+        [Position.ZAG]: "bg-gradient-to-r from-indigo-500 to-purple-500",
+        [Position.MEI]: "bg-gradient-to-r from-green-500 to-emerald-500",
+        [Position.ATA]: "bg-gradient-to-r from-rose-500 to-pink-500",
+        [Position.TEC]: "bg-gradient-to-r from-gray-500 to-slate-500",
+    };
+    return <span className={\`\${baseClasses} \${positionClasses[position]}\`}>{position}</span>;
+};
+
+const ScoutStat: React.FC<{ icon: string; label: string; value: number | string; colorClass?: string }> = ({ icon, label, value, colorClass = 'text-gray-800' }) => (
+    <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg shadow-sm text-center">
+        <i className={\`fas \${icon} text-2xl mb-2 \${colorClass}\`}></i>
+        <span className="text-sm font-semibold text-gray-600">{label}</span>
+        <span className={\`text-2xl font-bold \${colorClass}\`}>{value}</span>
+    </div>
+);
+
+const PlayerScoutDetail: React.FC<{ player: ProcessedPlayer }> = ({ player }) => {
+    return (
+        <div className="p-2">
+            <header className="flex flex-col sm:flex-row items-center gap-4 mb-6 pb-4 border-b border-gray-200">
+                <img src={player.timeEscudo.replace('30x30', '60x60')} alt={player.time} className="w-16 h-16 object-contain" />
+                <div className="text-center sm:text-left">
+                    <h2 className="text-3xl font-bold text-gray-800">{player.nome}</h2>
+                    <div className="flex items-center justify-center sm:justify-start gap-3 mt-1">
+                        <span className="text-gray-600 font-medium">{player.time}</span>
+                        <PositionBadge position={player.posicao} />
+                    </div>
+                </div>
+            </header>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {/* General Stats */}
+                <ScoutStat icon="fa-chart-line" label="Potencial" value={player.potencial.toFixed(2)} colorClass="text-[#FF8C42]" />
+                <ScoutStat icon="fa-star" label="Média" value={player.media.toFixed(2)} colorClass="text-blue-500" />
+                <ScoutStat icon="fa-running" label="Jogos" value={player.jogos} colorClass="text-purple-500" />
+                 <ScoutStat icon="fa-calculator" label="Média Básica" value={player.mediaBasica.toFixed(2)} colorClass="text-indigo-500" />
+
+                {/* Positive Scouts */}
+                <ScoutStat icon="fa-futbol" label="Gols" value={player.gols} colorClass="text-green-600" />
+                <ScoutStat icon="fa-hands-helping" label="Assistências" value={player.assistencias} colorClass="text-green-600" />
+                <ScoutStat icon="fa-shield-alt" label="Desarmes" value={player.desarmes} colorClass="text-green-600" />
+                <ScoutStat icon="fa-magnet" label="Roubos de Bola" value={player.roubosDeBola} colorClass="text-green-600" />
+
+                {/* Negative Scouts */}
+                <ScoutStat icon="fa-exclamation-triangle" label="Faltas Cometidas" value={player.faltasCometidas} colorClass="text-red-500" />
+                <ScoutStat icon="fa-square" label="Cartões Amarelos" value={player.cartoesAmarelos} colorClass="text-yellow-500" />
+                <ScoutStat icon="fa-square" label="Cartões Vermelhos" value={player.cartoesVermelhos} colorClass="text-red-600" />
+                 <ScoutStat icon="fa-info-circle" label="Status" value={player.status} colorClass="text-gray-600" />
+            </div>
+        </div>
+    );
+};
+
+export default PlayerScoutDetail;`,
+            'components/SgEditModal.tsx': `
+import React, { useState, useEffect } from 'react';
+import type { SgTeam } from '../types';
+import Modal from './Modal';
+
+interface SgEditModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (data: SgTeam[]) => void;
+    currentSgData: SgTeam[];
+    roundNumber: number;
+}
+
+const SgEditModal: React.FC<SgEditModalProps> = ({ isOpen, onClose, onSave, currentSgData, roundNumber }) => {
+    
+    // Create a simplified state for editing. We only need to store the max probability number.
+    const getInitialState = (data: SgTeam[]) => {
+        // Correctly map existing data
+        const processedData = data.map(item => {
+             const probMatch = item.probability.match(/(\\d+)%/);
+             const probValue = probMatch ? probMatch[1] : '';
+             return {
+                team: item.team,
+                probability: probValue,
+                observation: item.observation,
+                width: '' // width is calculated on save
+             }
+        });
+
+        // Add new, unique objects for empty rows to avoid shared state bug
+        while (processedData.length < 5) {
+            processedData.push({ team: '', probability: '', observation: '', width: '' });
+        }
+
+        return processedData.slice(0, 5); // Ensure there are always 5 items
+    }
+
+    const [editedData, setEditedData] = useState<SgTeam[]>(getInitialState(currentSgData));
+    
+    useEffect(() => {
+        if (isOpen) {
+            setEditedData(getInitialState(currentSgData));
+        }
+    }, [currentSgData, isOpen]);
+
+    const handleInputChange = (index: number, field: keyof SgTeam, value: string) => {
+        const newData = [...editedData];
+        newData[index] = { ...newData[index], [field]: value };
+        setEditedData(newData);
+    };
+
+    const handleSaveClick = () => {
+        // Filter out empty rows before saving
+        const dataToSave = editedData.filter(item => item.team.trim() !== '' && item.probability.trim() !== '');
+        onSave(dataToSave);
+    };
+
+    return (
+        <Modal 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title={\`Gerenciar Probabilidades de SG - Rodada \${roundNumber}\`}
+            maxWidth="max-w-3xl"
+        >
+            <div className="space-y-4">
+                <div className="grid grid-cols-12 gap-x-4 px-3 pb-2 border-b font-bold text-gray-500">
+                    <div className="col-span-4">Time</div>
+                    <div className="col-span-2">Prob. (%)</div>
+                    <div className="col-span-6">Observação</div>
+                </div>
+
+                {editedData.map((item, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-x-4 items-center">
+                        <div className="col-span-4">
+                            <input
+                                type="text"
+                                placeholder="Nome do Time"
+                                value={item.team}
+                                onChange={(e) => handleInputChange(index, 'team', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF8C42] focus:border-[#FF8C42]"
+                            />
+                        </div>
+                        <div className="col-span-2">
+                             <input
+                                type="number"
+                                placeholder="Ex: 70"
+                                value={item.probability}
+                                onChange={(e) => handleInputChange(index, 'probability', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF8C42] focus:border-[#FF8C42]"
+                            />
+                        </div>
+                        <div className="col-span-6">
+                             <input
+                                type="text"
+                                placeholder="Ex: Defesa sólida"
+                                value={item.observation}
+                                onChange={(e) => handleInputChange(index, 'observation', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF8C42] focus:border-[#FF8C42]"
+                            />
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+             <div className="mt-8 flex justify-end gap-3">
+                <button
+                    onClick={onClose}
+                    className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg shadow-md hover:bg-gray-300 transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button
+                    onClick={handleSaveClick}
+                    className="bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-2 px-6 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-transform"
+                >
+                    Salvar Alterações
+                </button>
+            </div>
+        </Modal>
+    );
+};
+
+export default SgEditModal;`,
+            'components/Modal.tsx': `
+import React, { useEffect } from 'react';
+
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    children: React.ReactNode;
+    maxWidth?: 'max-w-xs' | 'max-w-sm' | 'max-w-md' | 'max-w-lg' | 'max-w-xl' | 'max-w-2xl' | 'max-w-3xl' | 'max-w-4xl' | 'max-w-5xl' | 'max-w-6xl' | 'max-w-7xl';
+}
+
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth = 'max-w-5xl' }) => {
+    useEffect(() => {
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [onClose]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div 
+            className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"
+            onClick={onClose}
+            aria-modal="true"
+            role="dialog"
+        >
+            <style>{\`
+                @keyframes fade-in-up {
+                    from { opacity: 0; transform: scale(0.95) translateY(20px); }
+                    to { opacity: 1; transform: scale(1) translateY(0); }
+                }
+                .animate-modal-content {
+                    animation: fade-in-up 0.3s ease-out forwards;
+                }
+            \`}</style>
+            <div 
+                className={\`bg-white rounded-2xl shadow-2xl w-full \${maxWidth} max-h-[90vh] overflow-y-auto p-6 relative animate-modal-content\`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex justify-between items-center pb-4 border-b border-gray-200">
+                    <h2 className="text-2xl font-bold text-[#FF8C42]">{title}</h2>
+                    <button 
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-gray-800"
+                        aria-label="Fechar modal"
+                    >
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div className="mt-4">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Modal;`
+        };
+
+        const downloadButton = document.getElementById('downloadBtn');
+        const buttonText = document.getElementById('btnText');
+
+        downloadButton.addEventListener('click', async () => {
+            if (!window.JSZip) {
+                alert('A biblioteca de compactação não pôde ser carregada. Verifique sua conexão com a internet.');
+                return;
+            }
+
+            downloadButton.disabled = true;
+            buttonText.textContent = 'Gerando arquivo...';
+
+            try {
+                const zip = new JSZip();
+
+                // Create a components folder
+                const componentsFolder = zip.folder("components");
+
+                for (const [path, content] of Object.entries(filesToZip)) {
+                    if (path.startsWith('components/')) {
+                        const fileName = path.split('/')[1];
+                        componentsFolder.file(fileName, content.trim());
+                    } else {
+                        zip.file(path, content.trim());
+                    }
+                }
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(zipBlob);
+                link.download = 'cartola-fc-dashboard-source.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+            } catch (error) {
+                console.error("Failed to generate zip file:", error);
+                alert("Ocorreu um erro ao gerar o arquivo .zip. Por favor, tente novamente.");
+            } finally {
+                downloadButton.disabled = false;
+                buttonText.textContent = 'Baixar Código Fonte (.zip)';
+            }
+        });
+    </script>
+
+</body>
+</html>

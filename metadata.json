@@ -1,0 +1,5 @@
+{
+  "name": "Cartola FC Dashboard",
+  "description": "An interactive dashboard for analyzing player and team statistics for Cartola FC, a popular fantasy football game. It features data visualizations, player filtering, and lineup variation generation to help users make informed decisions for their teams.",
+  "requestFramePermissions": []
+}

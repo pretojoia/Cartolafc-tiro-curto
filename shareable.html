@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cartola FC Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        /* A custom style for text-shadow which is not a default tailwind class */
+        .text-shadow {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Recharts Library -->
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/javascript">
+        // De-structure libraries from window object
+        const { useState, useMemo, useCallback } = React;
+        const { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+        const e = React.createElement;
+
+        // --- From types.ts ---
+        const Position = {
+            MEI: 'MEI',
+            ATA: 'ATA',
+        };
+
+        // --- From constants.ts ---
+        const PLAYERS_DATA = [
+            { posicao: Position.MEI, nome: "Arrascaeta", time: "Flamengo", media: 9.74, gols: 13, assistencias: 10, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Andreas Pereira", time: "Palmeiras", media: 9, gols: 1, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Matheus Pereira", time: "Cruzeiro", media: 7.62, gols: 5, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Alan Patrick", time: "Internacional", media: 7.01, gols: 7, assistencias: 5, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Raphael Veiga", time: "Palmeiras", media: 3.11, gols: 1, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Philippe Coutinho", time: "Vasco", media: 5.41, gols: 6, assistencias: 4, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Lucho Acosta", time: "Fluminense", media: 5.83, gols: 0, assistencias: 0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Willian", time: "Grêmio", media: 5.9, gols: 0, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Barreal", time: "Santos", media: 6.02, gols: 1, assistencias: 0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.MEI, nome: "Matheusinho", time: "Sport", media: 5.41, gols: 1, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Kaio Jorge", time: "Cruzeiro", media: 9.63, gols: 15, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Vitor Roque", time: "Palmeiras", media: 7.1, gols: 8, assistencias: 3, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Pablo Vegetti", time: "Vasco", media: 7.27, gols: 11, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Pedro", time: "Flamengo", media: 7.70, gols: 10, assistencias: 4.0, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Rayan", time: "Vasco", media: 6.51, gols: 6, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Guilherme", time: "Santos", media: 6.84, gols: 10, assistencias: 2, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Arthur Cabral", time: "Botafogo", media: 7.11, gols: 3, assistencias: 1, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Luciano", time: "São Paulo", media: 5.4, gols: 4, assistencias: 3, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Flaco López", time: "Palmeiras", media: 5.69, gols: 2, assistencias: 6, fonte: "Jeffinho do Cartola" },
+            { posicao: Position.ATA, nome: "Derik Lacerda", time: "Sport", media: 5.68, gols: 3, assistencias: null, fonte: "Jeffinho do Cartola" }
+        ];
+        const SG_TEAMS = ["São Paulo", "Atlético-MG", "Palmeiras", "Flamengo", "Fortaleza", "Internacional"];
+        const SG_PROBABILITY_DATA = [
+            { team: "São Paulo", probability: "55-65%", observation: "Boa opção de SG (fonte: Gato Mestre)", width: "60%" },
+            { team: "Atlético-MG", probability: "60-70%", observation: "Defesa sólida, boas chances de SG", width: "65%" },
+            { team: "Palmeiras", probability: "60%", observation: "Força defensiva, bom mandante", width: "60%" },
+            { team: "Flamengo", probability: "55-65%", observation: "Boa média de SG, time forte", width: "60%" },
+            { team: "Fortaleza / Internacional", probability: "50-60%", observation: "Opções alternativas de SG", width: "55%" },
+        ];
+        
+        // --- From components/Card.tsx ---
+        const Card = ({ children, title, icon, className = '' }) => {
+            return e('div', { className: `bg-white/95 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-shadow duration-300 transform hover:-translate-y-1 ${className}` },
+                title && e('h2', { className: 'text-xl font-bold text-[#FF8C42] mb-5 pb-3 border-b-2 border-[#FFA85C] flex items-center' },
+                    icon && e('span', { className: 'mr-3 text-lg' }, icon),
+                    title
+                ),
+                children
+            );
+        };
+        
+        // --- From components/Header.tsx (Share button removed) ---
+        const Header = () => {
+             return e('header', { className: 'text-center p-8 mb-8 bg-white rounded-2xl shadow-xl relative overflow-hidden' },
+                e('div', { className: 'absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#FF8C42] to-[#FFA85C]' }),
+                e('h1', { className: 'text-4xl md:text-5xl font-extrabold mb-2 text-gray-800 uppercase tracking-wide' },
+                    'CARTOLA FC - TIMES TIRO CURTO VERSÃO ',
+                    e('span', { className: 'text-[#FF8C42]' }, '(BETA)')
+                ),
+                e('p', { className: 'text-lg md:text-xl text-gray-600 font-medium' },
+                    'Dashboard com análise dos melhores jogadores e Times Para TIRO CURTO'
+                )
+            );
+        };
+        
+        // --- From components/Footer.tsx ---
+        const Footer = () => {
+            return e('footer', { className: 'text-center p-6 mt-10 border-t-2 border-[#FFA85C]' },
+                e('p', { className: 'text-white opacity-90' },
+                    'Dados da Rodada 25 do Cartola FC | Desenvolvido para análise de desempenho (Jeffinho do Cartola)'
+                )
+            );
+        };
+
+        // --- From components/DashboardCharts.tsx ---
+        const CustomTooltip = ({ active, payload, label }) => {
+          if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return e('div', { className: 'bg-white/90 p-3 rounded-lg border border-gray-200 shadow-md' },
+                e('p', { className: 'font-bold text-gray-800' }, label),
+                payload.map((pld, index) => e('p', { key: index, style: { color: pld.color } }, `${pld.name}: ${pld.value}`)),
+                e('p', { className: 'text-sm text-gray-600' }, `Gols: ${data.gols ?? 0} | Assist.: ${data.assistencias ?? 0}`)
+            );
+          }
+          return null;
+        };
+
+        const DashboardCharts = ({ players }) => {
+            const chartData = players.map(p => ({ ...p, name: p.nome.split(' ')[0] }));
+            return e('section', { className: 'grid md:grid-cols-2 gap-6 mb-8' },
+                e(Card, { title: 'Média de Pontuação por Jogador', icon: e('i', { className: 'fas fa-chart-bar' }) },
+                    e('div', { className: 'w-full h-80' },
+                        e(ResponsiveContainer, { width: '100%', height: '100%' },
+                            e(BarChart, { data: chartData, margin: { top: 5, right: 20, left: -10, bottom: 5 } },
+                                e(CartesianGrid, { strokeDasharray: '3 3', vertical: false }),
+                                e(XAxis, { dataKey: 'name', tick: { fontSize: 12 } }),
+                                e(YAxis),
+                                e(Tooltip, { content: e(CustomTooltip), cursor: { fill: 'rgba(255, 140, 66, 0.1)' } }),
+                                e(Bar, { dataKey: 'media', name: 'Média', fill: 'rgba(255, 140, 66, 0.8)', radius: [5, 5, 0, 0] })
+                            )
+                        )
+                    )
+                ),
+                e(Card, { title: 'Gols e Assistências por Jogador', icon: e('i', { className: 'fas fa-futbol' }) },
+                    e('div', { className: 'w-full h-80' },
+                        e(ResponsiveContainer, { width: '100%', height: '100%' },
+                            e(LineChart, { data: chartData, margin: { top: 5, right: 20, left: -10, bottom: 5 } },
+                                e(CartesianGrid, { strokeDasharray: '3 3' }),
+                                e(XAxis, { dataKey: 'name', tick: { fontSize: 12 } }),
+                                e(YAxis),
+                                e(Tooltip, { content: e(CustomTooltip) }),
+                                e(Legend),
+                                e(Line, { type: 'monotone', dataKey: 'gols', name: 'Gols', stroke: '#FF6B35', strokeWidth: 2 }),
+                                e(Line, { type: 'monotone', dataKey: 'assistencias', name: 'Assistências', stroke: '#2196F3', strokeWidth: 2 })
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // --- From components/SgSection.tsx ---
+        const SgSection = ({ sgData }) => {
+            return e(Card, { title: 'Times com Maior Probabilidade de SG', icon: e('i', { className: 'fas fa-shield-alt' }) },
+                e('div', { className: 'overflow-x-auto' },
+                    e('table', { className: 'w-full min-w-max text-left' },
+                        e('thead', null, 
+                            e('tr', null,
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold rounded-tl-lg' }, 'Time'),
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold' }, 'Probabilidade de Vitória'),
+                               e('th', { className: 'p-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-semibold rounded-tr-lg' }, 'Observação')
+                            )
+                        ),
+                        e('tbody', null, 
+                            sgData.map((team, index) => e('tr', { key: index, className: 'border-b border-purple-100 hover:bg-purple-50 transition-colors' },
+                                e('td', { className: 'p-4 font-medium' }, team.team),
+                                e('td', { className: 'p-4' },
+                                    e('span', null, team.probability),
+                                    e('div', { className: 'w-full bg-gray-200 rounded-full h-2.5 mt-1' },
+                                        e('div', { className: 'bg-gradient-to-r from-green-400 to-lime-500 h-2.5 rounded-full', style: { width: team.width } })
+                                    )
+                                ),
+                                e('td', { className: 'p-4 text-gray-600' }, team.observation)
+                            ))
+                        )
+                    )
+                ),
+                e('div', { className: 'flex justify-around text-center mt-6' },
+                    e('div', { className: 'flex-1 p-4' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '65%'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Maior Probabilidade')
+                    ),
+                    e('div', { className: 'flex-1 p-4 border-x border-gray-200' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '5'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Times Recomendados')
+                    ),
+                    e('div', { className: 'flex-1 p-4' },
+                        e('span', { className: 'block text-4xl font-bold text-[#FF8C42]' }, '55%'),
+                        e('span', { className: 'text-sm text-gray-600' }, 'Probabilidade Mínima')
+                    )
+                )
+            );
+        };
+        
+        // --- From components/VariationsSection.tsx ---
+        const PlayerRow = ({ player }) => e('div', { className: 'flex flex-col sm:flex-row justify-between py-2 border-b border-gray-200 last:border-b-0' },
+            e('span', { className: 'font-semibold' }, player.nome),
+            e('span', { className: 'text-sm text-gray-600' }, `${player.time} | Média: ${player.media?.toFixed(2) ?? '-'}`)
+        );
+
+        const VariationCard = ({ variation }) => e('div', { className: 'bg-white/95 rounded-2xl p-5 shadow-lg border-2 border-[#FFA85C]' },
+            e('h3', { className: 'text-lg font-bold text-center text-[#FF8C42] mb-4' }, `Variação ${variation.id}`),
+            e('div', null,
+                e('h4', { className: 'font-bold text-gray-700 mt-4 mb-2' }, 'Meio-Campo (3)'),
+                variation.midfielders.map(player => e(PlayerRow, { key: player.nome, player: player })),
+                e('h4', { className: 'font-bold text-gray-700 mt-6 mb-2' }, 'Ataque (3)'),
+                variation.attackers.map(player => e(PlayerRow, { key: player.nome, player: player }))
+            )
+        );
+
+        const VariationsSection = ({ variations }) => {
+            return e('section', { id: 'variationsSection' },
+                e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10' }, 'Variações de Escalação Baseadas em SG'),
+                e('div', { className: 'grid md:grid-cols-2 lg:grid-cols-3 gap-6' },
+                    variations.map(v => e(VariationCard, { key: v.id, variation: v }))
+                )
+            );
+        };
+
+        // --- From components/Filters.tsx ---
+        const FilterSelect = ({ label, value, onChange, children }) => e('div', { className: 'flex flex-col flex-1 min-w-[180px]' },
+            e('label', { className: 'mb-2 font-semibold text-[#FF8C42]' }, label),
+            e('select', { value: value, onChange: onChange, className: 'p-3 rounded-lg border-2 border-[#FFA85C] focus:border-[#FF8C42] focus:ring-2 focus:ring-[#FF8C42]/50 outline-none transition' },
+                children
+            )
+        );
+        
+        const Filters = ({ teams, filters, onFilterChange }) => {
+            const handlePositionChange = (evt) => onFilterChange({ ...filters, position: evt.target.value });
+            const handleTeamChange = (evt) => onFilterChange({ ...filters, team: evt.target.value });
+            const handleSortByChange = (evt) => onFilterChange({ ...filters, sortBy: evt.target.value });
+
+            return e('section', { className: 'bg-white/95 p-5 rounded-2xl shadow-lg flex flex-wrap gap-5 my-8' },
+                e(FilterSelect, { label: 'Posição', value: filters.position, onChange: handlePositionChange },
+                    e('option', { value: 'all' }, 'Todas as Posições'),
+                    e('option', { value: 'MEI' }, 'Meia (MEI)'),
+                    e('option', { value: 'ATA' }, 'Atacante (ATA)')
+                ),
+                e(FilterSelect, { label: 'Time', value: filters.team, onChange: handleTeamChange },
+                    e('option', { value: 'all' }, 'Todos os Times'),
+                    teams.map(team => e('option', { key: team, value: team }, team))
+                ),
+                e(FilterSelect, { label: 'Ordenar por', value: filters.sortBy, onChange: handleSortByChange },
+                    e('option', { value: 'media' }, 'Média (Maior para Menor)'),
+                    e('option', { value: 'gols' }, 'Gols (Maior para Menor)'),
+                    e('option', { value: 'assistencias' }, 'Assistências (Maior para Menor)'),
+                    e('option', { value: 'nome' }, 'Nome (A-Z)')
+                )
+            );
+        };
+        
+        // --- From components/PlayersTable.tsx ---
+        const PositionBadge = ({ position }) => {
+            const baseClasses = "inline-block px-3 py-1 text-xs font-bold text-white rounded-full uppercase";
+            const positionClasses = {
+                [Position.MEI]: "bg-gradient-to-r from-green-500 to-emerald-500",
+                [Position.ATA]: "bg-gradient-to-r from-blue-500 to-sky-500",
+            };
+            return e('span', { className: `${baseClasses} ${positionClasses[position]}` }, position);
+        };
+
+        const PlayersTable = ({ players }) => {
+            return e('section', { className: 'overflow-hidden rounded-2xl shadow-lg bg-white/95' },
+                e('div', { className: 'overflow-x-auto' },
+                    e('table', { className: 'w-full min-w-max text-left' },
+                        e('thead', null,
+                            e('tr', { className: 'bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white' },
+                                e('th', { className: 'p-4 font-semibold' }, 'Posição'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Jogador'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Time'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Média'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Gols'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Assistências'),
+                                e('th', { className: 'p-4 font-semibold' }, 'Fonte')
+                            )
+                        ),
+                        e('tbody', null,
+                            players.map((player, index) => e('tr', { key: `${player.nome}-${index}`, className: 'border-b border-orange-100 hover:bg-orange-50/50 transition-colors' },
+                                e('td', { className: 'p-4' }, e(PositionBadge, { position: player.posicao })),
+                                e('td', { className: 'p-4 font-medium' }, player.nome),
+                                e('td', { className: 'p-4' }, player.time),
+                                e('td', { className: 'p-4' }, player.media?.toFixed(2) ?? '-'),
+                                e('td', { className: 'p-4' }, player.gols ?? '-'),
+                                e('td', { className: 'p-4' }, player.assistencias ?? '-'),
+                                e('td', { className: 'p-4 text-sm text-gray-600' }, player.fonte)
+                            ))
+                        )
+                    )
+                )
+            );
+        };
+
+        // --- From App.tsx ---
+        const App = () => {
+            const [filters, setFilters] = useState({ position: 'all', team: 'all', sortBy: 'media' });
+            const [variations, setVariations] = useState(null);
+
+            const uniqueTeams = useMemo(() => {
+                return [...new Set(PLAYERS_DATA.map((p) => p.time))].sort();
+            }, []);
+
+            const filteredPlayers = useMemo(() => {
+                let players = PLAYERS_DATA.filter((player) => {
+                    const positionMatch = filters.position === 'all' || player.posicao === filters.position;
+                    const teamMatch = filters.team === 'all' || player.time === filters.team;
+                    return positionMatch && teamMatch;
+                });
+
+                players.sort((a, b) => {
+                    switch (filters.sortBy) {
+                        case 'media': return (b.media ?? 0) - (a.media ?? 0);
+                        case 'gols': return (b.gols ?? 0) - (a.gols ?? 0);
+                        case 'assistencias': return (b.assistencias ?? 0) - (a.assistencias ?? 0);
+                        case 'nome': return a.nome.localeCompare(b.nome);
+                        default: return 0;
+                    }
+                });
+                return players;
+            }, [filters]);
+
+            const handleGenerateVariations = useCallback(() => {
+                const playersFromSgTeams = PLAYERS_DATA.filter(player => SG_TEAMS.includes(player.time));
+                const midfielders = playersFromSgTeams.filter(p => p.posicao === Position.MEI);
+                const attackers = playersFromSgTeams.filter(p => p.posicao === Position.ATA);
+                const newVariations = [];
+
+                for (let i = 1; i <= 3; i++) {
+                    const shuffledMid = [...midfielders].sort(() => 0.5 - Math.random());
+                    const shuffledAtk = [...attackers].sort(() => 0.5 - Math.random());
+                    newVariations.push({
+                        id: i,
+                        midfielders: shuffledMid.slice(0, 3),
+                        attackers: shuffledAtk.slice(0, 3),
+                    });
+                }
+                setVariations(newVariations);
+                setTimeout(() => {
+                    document.getElementById('variationsSection')?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }, []);
+
+            return e('div', { className: 'bg-gradient-to-br from-[#FF8C42] to-[#000000] min-h-screen font-sans text-[#1A1A1A]' },
+                e('div', { className: 'container mx-auto max-w-7xl p-2 sm:p-5' },
+                    e(Header),
+                    e('main', null,
+                        e(DashboardCharts, { players: filteredPlayers }),
+                        e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow' }, 'Top 5 Segurança de Gols (SG)'),
+                        e(SgSection, { sgData: SG_PROBABILITY_DATA }),
+                        e('div', { className: 'flex justify-center my-8' },
+                            e('button', { onClick: handleGenerateVariations, className: 'bg-gradient-to-r from-[#FF8C42] to-[#FFA85C] text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 ease-in-out flex items-center gap-2' },
+                                e('i', { className: 'fa-solid fa-dice' }),
+                                'Gerar Variações de Escalação'
+                            )
+                        ),
+                        variations && e(VariationsSection, { variations: variations }),
+                        e(Filters, { teams: uniqueTeams, filters: filters, onFilterChange: setFilters }),
+                        e('h2', { className: 'text-3xl font-bold text-white text-center my-6 sm:my-10 text-shadow' }, 'Top 20 Jogadores'),
+                        e(PlayersTable, { players: filteredPlayers })
+                    ),
+                    e(Footer)
+                )
+            );
+        };
+        
+        // --- From index.tsx ---
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(e(App));
+
+    </script>
+</body>
+</html>
